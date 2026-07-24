@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 造价预测系统</title>
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body class="app-page">
+    <!-- 顶栏 -->
+    <header class="app-header">
+        <a href="/" class="back-home">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M9 11L5 7L9 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            返回首页
+        </a>
+        <div class="header-divider">|</div>
+        <div class="header-title">AI 造价预测系统 <span class="header-badge" id="backend-badge">scikit-learn + AgentScope</span></div>
+        <div class="header-actions">
+            <button class="btn btn-ghost btn-sm" id="btn-back" style="display:none">返回上一步</button>
+            <button class="btn btn-ghost btn-sm" id="btn-llm-config">⚙ LLM 配置</button>
+            <button class="btn btn-ghost btn-sm" id="btn-new-project">+ 新建项目</button>
+        </div>
+    </header>
+
+    <!-- 主体三栏布局 -->
+    <div class="app-shell">
+        <!-- 左侧：历史会话 + 数据管理 -->
+        <aside class="sidebar">
+            <div class="sidebar-tabs">
+                <button class="tab-btn active" data-tab="sessions">💬 会话</button>
+                <button class="tab-btn" data-tab="data">📊 数据</button>
+            </div>
+
+            <div class="sidebar-content" id="tab-sessions">
+                <button class="btn btn-primary btn-block" id="btn-new-session">+ 新建会话</button>
+                <div class="session-list" id="session-list"></div>
+            </div>
+
+            <div class="sidebar-content" id="tab-data" style="display:none">
+                <div class="data-section">
+                    <h4>训练数据</h4>
+                    <div class="data-stat">
+                        <span>历史项目</span>
+                        <strong id="data-count">0</strong>
+                    </div>
+                    <div class="data-stat">
+                        <span>数据状态</span>
+                        <strong id="data-status">未导入</strong>
+                    </div>
+                </div>
+                <div class="data-actions">
+                    <button class="btn btn-ghost btn-block" id="btn-import-excel">
+                        📥 导入 Excel
+                    </button>
+                    <button class="btn btn-ghost btn-block" id="btn-generate-sample">
+                        🎲 生成示例数据
+                    </button>
+                    <button class="btn btn-ghost btn-block" id="btn-view-stats">
+                        📈 查看统计
+                    </button>
+                </div>
+
+                <div class="data-section" style="margin-top:16px;">
+                    <h4>模型训练 <span class="text-mute" style="font-size:11px; font-weight:normal;">scikit-learn</span></h4>
+                    <div class="data-stat">
+                        <span>已训练模型</span>
+                        <strong id="trained-count">0/8</strong>
+                    </div>
+                    <div class="data-stat">
+                        <span>AgentScope</span>
+                        <strong id="agentscope-status">检测中</strong>
+                    </div>
+                    <div id="model-status-list" class="model-status-list"></div>
+                </div>
+
+                <div class="data-actions" style="margin-top:12px;">
+                    <button class="btn btn-primary btn-block" id="btn-train-all">
+                        🚀 训练所有模型
+                    </button>
+                </div>
+                <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none">
+            </div>
+        </aside>
+
+        <!-- 中间：主内容区（步骤表单 / 对话）-->
+        <main class="main-area">
+            <!-- 模式切换 -->
+            <div class="mode-tabs">
+                <button class="mode-tab active" data-mode="wizard">📋 向导预测</button>
+                <button class="mode-tab" data-mode="chat">💬 对话预测</button>
+            </div>
+
+            <!-- 向导模式 -->
+            <div class="wizard-area" id="wizard-area">
+                <!-- 步骤指示器 -->
+                <div class="step-indicator">
+                    <div class="step active" data-step="1">
+                        <div class="step-circle">1</div>
+                        <div class="step-info">
+                            <div class="step-name">项目信息</div>
+                            <div class="step-desc">录入基本信息</div>
+                        </div>
+                    </div>
+                    <div class="step" data-step="2">
+                        <div class="step-circle">2</div>
+                        <div class="step-info">
+                            <div class="step-name">选择阶段</div>
+                            <div class="step-desc">确定预测精度</div>
+                        </div>
+                    </div>
+                    <div class="step" data-step="3">
+                        <div class="step-circle">3</div>
+                        <div class="step-info">
+                            <div class="step-name">配置参数</div>
+                            <div class="step-desc">填写阶段参数</div>
+                        </div>
+                    </div>
+                    <div class="step" data-step="4">
+                        <div class="step-circle">4</div>
+                        <div class="step-info">
+                            <div class="step-name">模型选择</div>
+                            <div class="step-desc">确认预测模型</div>
+                        </div>
+                    </div>
+                    <div class="step" data-step="5">
+                        <div class="step-circle">5</div>
+                        <div class="step-info">
+                            <div class="step-name">预测结果</div>
+                            <div class="step-desc">查看造价分析</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 步骤内容 -->
+                <div class="step-content" id="step-content">
+                    <!-- 内容由 JS 动态生成 -->
+                </div>
+
+                <!-- 底部导航 -->
+                <div class="step-footer">
+                    <button class="btn btn-ghost" id="btn-prev-step">上一步</button>
+                    <button class="btn btn-primary" id="btn-next-step">下一步：选择阶段</button>
+                </div>
+            </div>
+
+            <!-- 对话模式 -->
+            <div class="chat-area" id="chat-area" style="display:none">
+                <div class="chat-messages" id="chat-messages">
+                    <div class="chat-welcome">
+                        <div class="welcome-icon">🤖</div>
+                        <h3>北辰造价助手</h3>
+                        <p>基于 AgentScope SDK 的 ReAct 智能体，专精建筑工程造价预测</p>
+                        <div class="welcome-suggestions">
+                            <button class="suggestion-chip" data-q="帮我预测一个 50000 平米的华东地区学校项目造价">预测华东学校项目</button>
+                            <button class="suggestion-chip" data-q="什么是工程量清单计价法？">了解工程量清单</button>
+                            <button class="suggestion-chip" data-q="推荐适合的预测模型组合">模型推荐</button>
+                            <button class="suggestion-chip" data-q="六层级成本分解是怎样的？">了解六层级分解</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="chat-input-wrap">
+                    <textarea id="chat-input" placeholder="输入项目描述，例如：'预测 30000 平米北京办公楼造价'" rows="1"></textarea>
+                    <button class="btn-send" id="btn-send">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <path d="M3 10L17 3L10 17L9 11L3 10Z" fill="currentColor"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 数据统计弹窗 -->
+    <div class="modal" id="modal-stats" style="display:none">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>训练数据统计</h3>
+                <button class="modal-close" data-modal="modal-stats">×</button>
+            </div>
+            <div class="modal-body" id="stats-content"></div>
+        </div>
+    </div>
+
+    <!-- 报告弹窗 -->
+    <div class="modal" id="modal-report" style="display:none">
+        <div class="modal-content" style="max-width: 900px">
+            <div class="modal-header">
+                <h3>造价分析报告</h3>
+                <button class="modal-close" data-modal="modal-report">×</button>
+            </div>
+            <div class="modal-body" id="report-content"></div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" id="btn-download-report">下载 JSON</button>
+                <button class="btn btn-primary" id="btn-download-html">下载 HTML 报告</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- LLM 配置弹窗 -->
+    <div class="modal" id="modal-llm" style="display:none">
+        <div class="modal-content" style="max-width: 720px">
+            <div class="modal-header">
+                <h3>⚙ LLM 模型配置</h3>
+                <button class="modal-close" data-modal="modal-llm">×</button>
+            </div>
+            <div class="modal-body" id="llm-config-content"></div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" id="btn-llm-cancel">取消</button>
+                <button class="btn btn-primary" id="btn-llm-save">保存配置</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 造价预测 - 智能工程造价预测系统</title>
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/landing.css">
+</head>
+<body class="landing-page">
+    <!-- 顶部导航 -->
+    <header class="navbar">
+        <div class="container nav-inner">
+            <div class="logo">
+                <div class="logo-mark">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                        <path d="M3 17L9 11L13 15L21 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M14 7H21V14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+                <span class="logo-text">AI 造价预测</span>
+            </div>
+            <nav class="nav-links">
+                <a href="#features">功能特性</a>
+                <a href="#workflow">使用流程</a>
+                <a href="#pricing">定价方案</a>
+                <a href="/app" class="btn btn-primary btn-sm">开始使用</a>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Hero 区 -->
+    <section class="hero">
+        <div class="container hero-inner">
+            <div class="hero-badge">
+                <span class="badge-icon">⚡</span>
+                <span>基于机器学习的智能造价预测</span>
+            </div>
+            <h1 class="hero-title">
+                智能工程造价预测<br>
+                开启精准估算新时代
+            </h1>
+            <p class="hero-subtitle">
+                基于历史项目数据训练的专业模型，为您提供估算、概算、预算三阶段的<br>
+                精准造价预测。支持六层级成本分解，助力项目投资决策。
+            </p>
+            <div class="hero-cta">
+                <a href="/app" class="btn btn-primary btn-lg">
+                    立即开始预测
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-left:6px">
+                        <path d="M6 12L10 8L6 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </a>
+                <a href="#workflow" class="btn btn-ghost btn-lg">观看演示视频</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- 关键数据 -->
+    <section class="stats">
+        <div class="container stats-inner">
+            <div class="stat-item">
+                <div class="stat-num">95%+</div>
+                <div class="stat-label">预测准确率</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-num">6</div>
+                <div class="stat-label">层级成本分解</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-num">3</div>
+                <div class="stat-label">预测阶段覆盖</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 功能特性 -->
+    <section id="features" class="features">
+        <div class="container">
+            <div class="section-head">
+                <h2>核心功能</h2>
+                <p>三大模型层级，融合多算法优势，提供专业级造价预测能力</p>
+            </div>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-icon icon-blue">🏗️</div>
+                    <h3>总造价预测模型</h3>
+                    <p>PSO-SVR + 梯度提升树，预测项目总造价和单方造价，准确率高达 92%。</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon icon-purple">📊</div>
+                    <h3>分部/分项工程模型</h3>
+                    <p>XGBoost 多层级预测，分解到分部、子分部、分项工程的单方造价。</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon icon-green">📋</div>
+                    <h3>清单项目模型</h3>
+                    <p>随机森林 + 关联规则 + 线性回归，挖掘清单组成规律与材料耗量。</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon icon-orange">💬</div>
+                    <h3>对话式交互</h3>
+                    <p>基于 AgentScope 的 ReAct 智能体，自然语言描述项目即可获得预测。</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon icon-red">📥</div>
+                    <h3>批量训练导入</h3>
+                    <p>支持 Excel 批量导入历史项目数据，模型持续学习，越用越准。</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon icon-cyan">🎯</div>
+                    <h3>三阶段精度</h3>
+                    <p>估算 70-80% / 概算 80-90% / 预算 95%+，匹配项目各阶段决策需求。</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 使用流程 -->
+    <section id="workflow" class="workflow">
+        <div class="container">
+            <div class="section-head">
+                <h2>使用流程</h2>
+                <p>五步完成专业造价预测，每一步都有智能引导</p>
+            </div>
+            <div class="workflow-steps">
+                <div class="workflow-step">
+                    <div class="step-num">1</div>
+                    <h4>录入项目信息</h4>
+                    <p>填写项目名称、类型、面积、地区等基础信息</p>
+                </div>
+                <div class="workflow-step">
+                    <div class="step-num">2</div>
+                    <h4>选择预测阶段</h4>
+                    <p>根据项目当前阶段选择估算/概算/预算精度</p>
+                </div>
+                <div class="workflow-step">
+                    <div class="step-num">3</div>
+                    <h4>配置技术参数</h4>
+                    <p>填写基础/结构/系统/装修等参数，越详细越精确</p>
+                </div>
+                <div class="workflow-step">
+                    <div class="step-num">4</div>
+                    <h4>选择预测模型</h4>
+                    <p>系统自动匹配最佳模型，支持手动调整</p>
+                </div>
+                <div class="workflow-step">
+                    <div class="step-num">5</div>
+                    <h4>查看预测结果</h4>
+                    <p>结构化展示六层级成本分解，导出分析报告</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 定价方案 -->
+    <section id="pricing" class="pricing">
+        <div class="container">
+            <div class="section-head">
+                <h2>定价方案</h2>
+                <p>透明灵活的订阅模式，按需选择</p>
+            </div>
+            <div class="pricing-grid">
+                <div class="pricing-card">
+                    <h3>试用版</h3>
+                    <div class="price">¥0<span>/月</span></div>
+                    <ul>
+                        <li>✓ 50 次/月预测</li>
+                        <li>✓ 三层基础模型</li>
+                        <li>✓ 对话式交互</li>
+                        <li>✗ 批量训练</li>
+                        <li>✗ 模型自定义</li>
+                    </ul>
+                    <a href="/app" class="btn btn-ghost btn-block">免费使用</a>
+                </div>
+                <div class="pricing-card highlight">
+                    <div class="highlight-tag">推荐</div>
+                    <h3>专业版</h3>
+                    <div class="price">¥299<span>/月</span></div>
+                    <ul>
+                        <li>✓ 不限次数预测</li>
+                        <li>✓ 全部 8 个模型</li>
+                        <li>✓ Excel 批量训练</li>
+                        <li>✓ 自定义参数配置</li>
+                        <li>✓ 结果导出报告</li>
+                    </ul>
+                    <a href="/app" class="btn btn-primary btn-block">立即开通</a>
+                </div>
+                <div class="pricing-card">
+                    <h3>企业版</h3>
+                    <div class="price">¥1999<span>/月</span></div>
+                    <ul>
+                        <li>✓ 包含专业版全部</li>
+                        <li>✓ 私有模型训练</li>
+                        <li>✓ 团队协作</li>
+                        <li>✓ API 集成</li>
+                        <li>✓ 专属技术支持</li>
+                    </ul>
+                    <a href="/app" class="btn btn-ghost btn-block">联系销售</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 页脚 -->
+    <footer class="footer">
+        <div class="container">
+            <p>© 2026 AI 造价预测 · 基于 AgentScope SDK · 术语规范参考 ahua.edu.cn</p>
+        </div>
+    </footer>
+
+    <script src="/static/js/landing.js"></script>
+</body>
+</html>

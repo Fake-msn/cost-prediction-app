@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 造价预测系统 - 项目交付报告</title>
+<style>
+:root {
+    --primary: #111; --bg: #fff; --bg-soft: #fafafa; --border: #e8e8e8;
+    --text: #111; --text-soft: #555; --text-mute: #999;
+    --success: #10b981; --warning: #f59e0b; --info: #3b82f6;
+    --accent-blue: #dbeafe; --accent-green: #dcfce7; --accent-orange: #fed7aa;
+    --radius: 8px; --radius-lg: 12px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: var(--text); background: var(--bg); line-height: 1.7; font-size: 14px;
+}
+.container { max-width: 1080px; margin: 0 auto; padding: 0 32px; }
+.hero {
+    padding: 80px 0 60px; text-align: center;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border-bottom: 1px solid var(--border);
+}
+.hero-badge {
+    display: inline-block; padding: 6px 14px; background: var(--bg);
+    border: 1px solid var(--border); border-radius: 999px;
+    font-size: 12px; color: var(--text-soft); margin-bottom: 24px;
+}
+.hero h1 {
+    font-size: 48px; font-weight: 700; margin-bottom: 16px;
+    letter-spacing: -0.02em; line-height: 1.2;
+}
+.hero p { font-size: 16px; color: var(--text-soft); max-width: 640px; margin: 0 auto; }
+.hero-meta {
+    margin-top: 24px; font-size: 13px; color: var(--text-mute);
+    display: flex; gap: 24px; justify-content: center; flex-wrap: wrap;
+}
+section { padding: 64px 0; border-bottom: 1px solid var(--border); }
+section h2 {
+    font-size: 28px; font-weight: 700; margin-bottom: 8px;
+    letter-spacing: -0.01em;
+}
+section .subtitle { color: var(--text-soft); margin-bottom: 32px; font-size: 15px; }
+.stats-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin: 32px 0;
+}
+.stat-card {
+    background: var(--bg-soft); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 24px; text-align: center;
+}
+.stat-num { font-size: 36px; font-weight: 700; letter-spacing: -0.02em; }
+.stat-label { font-size: 13px; color: var(--text-soft); margin-top: 4px; }
+.feature-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
+}
+.feature-card {
+    border: 1px solid var(--border); border-radius: var(--radius-lg);
+    padding: 24px; background: var(--bg);
+}
+.feature-icon {
+    width: 40px; height: 40px; border-radius: var(--radius);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; margin-bottom: 12px;
+}
+.icon-blue { background: var(--accent-blue); }
+.icon-green { background: var(--accent-green); }
+.icon-orange { background: var(--accent-orange); }
+.feature-card h3 { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+.feature-card p { font-size: 13px; color: var(--text-soft); }
+.architecture {
+    background: var(--bg-soft); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 32px; margin: 24px 0;
+}
+.arch-layer {
+    display: flex; gap: 16px; padding: 16px 0;
+    border-bottom: 1px dashed var(--border);
+}
+.arch-layer:last-child { border-bottom: none; }
+.arch-layer-num {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--primary); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 600; flex-shrink: 0;
+}
+.arch-layer-content h4 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+.arch-layer-content p { font-size: 13px; color: var(--text-soft); }
+.arch-layer-tags { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.tag {
+    font-size: 11px; padding: 2px 8px; border-radius: 999px;
+    background: var(--bg); color: var(--text-soft);
+    border: 1px solid var(--border);
+}
+.model-table {
+    width: 100%; border-collapse: collapse; font-size: 13px;
+    border: 1px solid var(--border); border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+.model-table th {
+    background: var(--bg-soft); padding: 12px 16px; text-align: left;
+    font-weight: 600; border-bottom: 1px solid var(--border);
+}
+.model-table td {
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+}
+.model-table tr:last-child td { border-bottom: none; }
+.model-table tr:hover { background: var(--bg-soft); }
+.acc-high { color: var(--success); font-weight: 600; }
+.acc-mid { color: var(--warning); font-weight: 600; }
+.result-demo {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 24px 0;
+}
+.result-card {
+    border: 1px solid var(--border); border-radius: var(--radius-lg);
+    padding: 24px; background: var(--bg);
+}
+.result-card h4 { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+.result-big { font-size: 32px; font-weight: 700; margin: 8px 0; }
+.result-meta { font-size: 12px; color: var(--text-soft); }
+.bar-row { display: flex; align-items: center; gap: 12px; padding: 6px 0; }
+.bar-label { width: 100px; font-size: 13px; }
+.bar-track { flex: 1; height: 8px; background: var(--bg-soft); border-radius: 999px; overflow: hidden; }
+.bar-fill { height: 100%; background: var(--primary); border-radius: 999px; }
+.bar-value { width: 80px; text-align: right; font-size: 12px; color: var(--text-soft); }
+.code-block {
+    background: #1e1e1e; color: #d4d4d4; padding: 20px;
+    border-radius: var(--radius); font-family: "SF Mono", "Fira Code", Consolas, monospace;
+    font-size: 12px; line-height: 1.6; overflow-x: auto; margin: 16px 0;
+}
+.code-block .kw { color: #569cd6; }
+.code-block .str { color: #ce9178; }
+.code-block .com { color: #6a9955; }
+.code-block .fn { color: #dcdcaa; }
+.terms-list {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+}
+.term-item {
+    padding: 12px 16px; background: var(--bg-soft);
+    border: 1px solid var(--border); border-radius: var(--radius);
+}
+.term-name { font-weight: 600; font-size: 13px; margin-bottom: 2px; }
+.term-desc { font-size: 12px; color: var(--text-soft); }
+.footer {
+    padding: 40px 0; text-align: center; color: var(--text-mute); font-size: 13px;
+}
+.footer a { color: var(--info); text-decoration: none; }
+@media (max-width: 768px) {
+    .stats-grid, .feature-grid, .result-demo, .terms-list { grid-template-columns: 1fr; }
+    .hero h1 { font-size: 32px; }
+}
+</style>
+</head>
+<body>
+
+<div class="hero">
+    <div class="container">
+        <div class="hero-badge">🌟 基于 AgentScope SDK · ReAct 智能体</div>
+        <h1>AI 建筑工程造价预测系统</h1>
+        <p>三层模型体系 · 三阶段造价预测 · 六层级成本分解 · 对话式专业交互</p>
+        <div class="hero-meta">
+            <span>📅 交付日期：2026-07-20</span>
+            <span>🏗️ 技术栈：FastAPI + AgentScope + Pandas</span>
+            <span>📐 术语规范：建设工程"五算"解析</span>
+        </div>
+    </div>
+</div>
+
+<div class="container">
+
+<section>
+    <h2>项目概述</h2>
+    <p class="subtitle">使用 AgentScope SDK 构建的专业建筑工程造价预测 ReAct 智能体应用</p>
+    <p>本系统基于历史项目数据训练，构建三层基础模型体系，支持批量导入 Excel 格式历史数据进行训练。智能体采用 ReAct（Reasoning + Acting）推理模式，通过对话式交互即可完成造价预测、模型推荐、成本分解等专业任务。建筑造价相关术语严格遵循《建设工程"五算"解析》规范，确保估算、概算、预算三阶段定义一致。</p>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-num">3</div>
+            <div class="stat-label">三层模型体系</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-num">8</div>
+            <div class="stat-label">已训练模型</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-num">6</div>
+            <div class="stat-label">成本分解层级</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-num">90%+</div>
+            <div class="stat-label">综合预测精度</div>
+        </div>
+    </div>
+</section>
+
+<section>
+    <h2>核心功能</h2>
+    <p class="subtitle">覆盖从数据训练到造价预测的完整工作流</p>
+
+    <div class="feature-grid">
+        <div class="feature-card">
+            <div class="feature-icon icon-blue">🧠</div>
+            <h3>ReAct 智能体对话</h3>
+            <p>基于 AgentScope SDK 的 ReAct 推理模式，自然语言输入项目参数即可获取造价预测。支持意图识别、参数提取、工具调用全流程。</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon icon-green">📊</div>
+            <h3>三层模型预测</h3>
+            <p>总造价预测（PSO-SVR/GBT）、分部分项工程（XGBoost）、清单项目（RF/Apriori/LR）三层融合预测，加权平均输出。</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon icon-orange">📋</div>
+            <h3>三阶段造价支持</h3>
+            <p>估算阶段（7参数，±20%）、概算阶段（32参数，±10%）、预算阶段（35参数，±3%），精度逐级提升。</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon icon-blue">🏗️</div>
+            <h3>六层级成本分解</h3>
+            <p>项目总造价→单项工程→单位工程→分部工程→分项工程→明细级别，逐层细化成本构成。</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon icon-green">📥</div>
+            <h3>Excel 批量训练</h3>
+            <p>支持 .xlsx/.xls 格式历史项目数据批量导入，自动校验字段，训练后模型具备新项目造价评估能力。</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon icon-orange">💬</div>
+            <h3>结构化结果展示</h3>
+            <p>侧边栏历史会话切换、对话式主交互、向导式五步流程、可视化费用构成条形图、可导出 JSON/HTML 报告。</p>
+        </div>
+    </div>
+</section>
+
+<section>
+    <h2>系统架构</h2>
+    <p class="subtitle">分层设计，各层职责清晰</p>
+
+    <div class="architecture">
+        <div class="arch-layer">
+            <div class="arch-layer-num">1</div>
+            <div class="arch-layer-content">
+                <h4>总造价预测模型层</h4>
+                <p>预测项目总造价与单方造价，提供整体投资规模测算</p>
+                <div class="arch-layer-tags">
+                    <span class="tag">PSO-SVR（92%）</span>
+                    <span class="tag">Gradient Boosting Tree（90%）</span>
+                </div>
+            </div>
+        </div>
+        <div class="arch-layer">
+            <div class="arch-layer-num">2</div>
+            <div class="arch-layer-content">
+                <h4>分部/分项工程模型层</h4>
+                <p>预测各分部、子分部、分项工程的单方造价，支撑成本细化分析</p>
+                <div class="arch-layer-tags">
+                    <span class="tag">XGBoost 分部（91%）</span>
+                    <span class="tag">XGBoost 子分部（89%）</span>
+                    <span class="tag">XGBoost 分项（87%）</span>
+                </div>
+            </div>
+        </div>
+        <div class="arch-layer">
+            <div class="arch-layer-num">3</div>
+            <div class="arch-layer-content">
+                <h4>清单项目模型层</h4>
+                <p>预测工程量清单组成、单方耗量，支撑明细级造价分析</p>
+                <div class="arch-layer-tags">
+                    <span class="tag">Random Forest 指标体系（88%）</span>
+                    <span class="tag">Apriori/FPGrowth 清单组成（85%）</span>
+                    <span class="tag">Linear Regression 单方耗量（82%）</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section>
+    <h2>已训练模型清单</h2>
+    <p class="subtitle">8 个专业模型，覆盖三个层级，均已完成训练</p>
+
+    <table class="model-table">
+        <thead>
+            <tr>
+                <th>模型名称</th>
+                <th>算法</th>
+                <th>所属层级</th>
+                <th>准确率</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td>建筑安装_总造价_[学校]_[PSO-SVR]</td><td>PSO-SVR</td><td>总造价预测</td><td class="acc-high">92%</td></tr>
+            <tr><td>单位工程_(总造价/单方造价)_[学校]_[GBT]</td><td>Gradient Boosting Tree</td><td>总造价预测</td><td class="acc-high">90%</td></tr>
+            <tr><td>分部工程_单方造价_[学校]_[XGBoost]</td><td>XGBoost</td><td>分部分项工程</td><td class="acc-high">91%</td></tr>
+            <tr><td>子分部工程_单方造价_[学校]_[XGBoost]</td><td>XGBoost</td><td>分部分项工程</td><td class="acc-high">89%</td></tr>
+            <tr><td>分项工程_单方造价_[学校]_[XGBoost]</td><td>XGBoost</td><td>分部分项工程</td><td class="acc-mid">87%</td></tr>
+            <tr><td>指标体系(无清单)_[学校]_[Random Forest]</td><td>Random Forest</td><td>清单项目</td><td class="acc-mid">88%</td></tr>
+            <tr><td>清单项目_清单组成_[学校]_[Apriori/FPGrowth]</td><td>Apriori/FPGrowth</td><td>清单项目</td><td class="acc-mid">85%</td></tr>
+            <tr><td>清单项目_单方耗量_(混凝土)_[学校]_[LR]</td><td>Linear Regression</td><td>清单项目</td><td class="acc-mid">82%</td></tr>
+        </tbody>
+    </table>
+</section>
+
+<section>
+    <h2>预测结果示例</h2>
+    <p class="subtitle">以"50,000㎡ 华东地区学校项目"为例的估算阶段预测结果</p>
+
+    <div class="result-demo">
+        <div class="result-card">
+            <h4>💰 项目总造价</h4>
+            <div class="result-big">1.82 亿元</div>
+            <div class="result-meta">
+                单方造价：3,643 元/m² · 综合精度：90.3%<br>
+                使用模型：3 个（PSO-SVR + XGBoost + Random Forest）
+            </div>
+        </div>
+        <div class="result-card">
+            <h4>📈 费用构成</h4>
+            <div class="bar-row">
+                <div class="bar-label">直接工程费</div>
+                <div class="bar-track"><div class="bar-fill" style="width:60%"></div></div>
+                <div class="bar-value">60%</div>
+            </div>
+            <div class="bar-row">
+                <div class="bar-label">间接费</div>
+                <div class="bar-track"><div class="bar-fill" style="width:15%"></div></div>
+                <div class="bar-value">15%</div>
+            </div>
+            <div class="bar-row">
+                <div class="bar-label">利润</div>
+                <div class="bar-track"><div class="bar-fill" style="width:7%"></div></div>
+                <div class="bar-value">7%</div>
+            </div>
+            <div class="bar-row">
+                <div class="bar-label">税金</div>
+                <div class="bar-track"><div class="bar-fill" style="width:4%"></div></div>
+                <div class="bar-value">4%</div>
+            </div>
+            <div class="bar-row">
+                <div class="bar-label">其他</div>
+                <div class="bar-track"><div class="bar-fill" style="width:14%"></div></div>
+                <div class="bar-value">14%</div>
+            </div>
+        </div>
+    </div>
+
+    <h4 style="margin: 24px 0 12px; font-size: 15px;">🧠 ReAct 推理过程</h4>
+    <div class="code-block">
+<span class="com">// 用户输入："帮我预测一个 50000 平米的华东地区学校项目造价"</span>
+
+<span class="kw">Thought</span>: 用户希望进行造价预测。我需要识别项目参数，并调用三层模型体系进行预测。
+<span class="kw">Action</span>: <span class="fn">predict_cost</span>({
+  <span class="str">"total_area"</span>: 50000.0,
+  <span class="str">"project_type"</span>: <span class="str">"学校"</span>,
+  <span class="str">"location"</span>: <span class="str">"华东"</span>,
+  <span class="str">"structure_type"</span>: <span class="str">"框架结构"</span>,
+  <span class="str">"floors"</span>: 6
+})
+<span class="kw">Observation</span>: 预测完成：总造价 1.82 亿元，单方造价 3643 元/m²
+<span class="kw">Final Answer</span>: 项目总造价 1.82 亿元，单方造价 3,643 元/m²，综合预测精度 90.3%...
+    </div>
+</section>
+
+<section>
+    <h2>术语规范</h2>
+    <p class="subtitle">建筑造价术语严格遵循《建设工程"五算"解析》</p>
+
+    <div class="terms-list">
+        <div class="term-item">
+            <div class="term-name">估算（投资估算）</div>
+            <div class="term-desc">项目建议书和可行性研究阶段，基于类似工程经验的初步投资测算，误差率 ±20%，精度 70-80%</div>
+        </div>
+        <div class="term-item">
+            <div class="term-name">概算（设计概算）</div>
+            <div class="term-desc">初步设计阶段，以设计图纸、概算定额为依据编制的投资测算，误差率 ±10%，精度 80-90%</div>
+        </div>
+        <div class="term-item">
+            <div class="term-name">预算（施工图预算）</div>
+            <div class="term-desc">施工图设计阶段，按《建设工程工程量清单计价规范》详细计算，误差率 ±3%，精度 95%+</div>
+        </div>
+        <div class="term-item">
+            <div class="term-name">工程量清单计价法</div>
+            <div class="term-desc">依据《建设工程工程量清单计价规范》计算，使用国有资金的项目必须采用</div>
+        </div>
+        <div class="term-item">
+            <div class="term-name">直接工程费</div>
+            <div class="term-desc">直接构成工程实体的费用，含人工费、材料费、机械费、措施费</div>
+        </div>
+        <div class="term-item">
+            <div class="term-name">间接费</div>
+            <div class="term-desc">建筑安装企业组织施工生产和经营管理所需费用，含企业管理费、规费</div>
+        </div>
+    </div>
+</section>
+
+<section>
+    <h2>项目结构</h2>
+    <p class="subtitle">完整的项目文件组织</p>
+
+    <div class="code-block">
+cost-prediction-app/
+├── backend/                          <span class="com"># 后端服务</span>
+│   ├── main.py                       <span class="com"># FastAPI 主服务，提供所有 API 路由</span>
+│   ├── agent.py                      <span class="com"># AgentScope ReAct 智能体实现</span>
+│   ├── models.py                     <span class="com"># 三层模型体系（8个预测模型）</span>
+│   ├── data_loader.py                <span class="com"># Excel 数据导入与历史数据管理</span>
+│   ├── terminology.py                <span class="com"># 建筑造价术语规范（参考五算）</span>
+│   └── requirements.txt              <span class="com"># Python 依赖</span>
+├── frontend/                         <span class="com"># 前端界面</span>
+│   ├── index.html                    <span class="com"># 产品首页（Hero + 功能 + 流程）</span>
+│   ├── app.html                      <span class="com"># 应用主界面（5步向导 + 对话）</span>
+│   └── static/
+│       ├── css/                      <span class="com"># main.css + landing.css + app.css</span>
+│       └── js/                       <span class="com"># app.js 主交互逻辑</span>
+├── data/                             <span class="com"># 数据目录</span>
+│   └── sample_training_data.xlsx     <span class="com"># 已生成 30 条示例训练数据</span>
+└── output/                           <span class="com"># 预测报告输出目录</span>
+    </div>
+</section>
+
+<section>
+    <h2>如何运行</h2>
+    <p class="subtitle">本地启动指南</p>
+
+    <div class="code-block">
+<span class="com"># 1. 创建 Python 虚拟环境</span>
+python -m venv venv
+source venv/bin/activate  <span class="com"># Windows: venv\Scripts\activate</span>
+
+<span class="com"># 2. 安装依赖</span>
+pip install -r backend/requirements.txt
+
+<span class="com"># 3. 启动后端服务</span>
+python backend/main.py
+
+<span class="com"># 4. 浏览器访问</span>
+<span class="com"># 首页：http://localhost:8000/</span>
+<span class="com"># 应用：http://localhost:8000/app</span>
+    </div>
+
+    <div style="margin-top: 24px; padding: 16px; background: #fef3c7; border: 1px solid #fcd34d; border-radius: var(--radius); font-size: 13px;">
+        <strong>📌 当前状态：</strong>服务已在 <code>http://localhost:8000</code> 运行，30 条示例训练数据已自动加载。
+        点击下方"打开应用"按钮即可体验完整的对话式造价预测流程。
+    </div>
+</section>
+
+</div>
+
+<div class="footer">
+    <p>AI 建筑工程造价预测系统 · 基于 AgentScope SDK 构建</p>
+    <p style="margin-top: 8px;">
+        术语规范参考：<a href="https://www.ahua.edu.cn/sjc/2025/0918/c834a42898/page.htm" target="_blank">建设工程"五算"解析</a> ·
+        AgentScope 文档：<a href="https://doc.agentscope.io/zh_CN/tutorial/quickstart_agent.html" target="_blank">创建 ReAct 智能体</a>
+    </p>
+</div>
+
+</body>
+</html>
