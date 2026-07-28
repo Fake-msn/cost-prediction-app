@@ -1,24 +1,29 @@
 # AI 建筑造价预测系统
 
-基于 **AgentScope SDK v2.0.4 + scikit-learn** 的建筑工程造价预测 ReAct 智能体应用。三层模型体系覆盖估算→概算→预算三阶段，支持 8 种建筑类型的六层级成本分解。
+基于 **AgentScope SDK v2.0.4 + scikit-learn** 的建筑工程造价预测 ReAct 智能体应用。三层模型体系覆盖估算→概算→预算三阶段，支持 8 种建筑类型的六层级成本分解。集成数据工程能力（7种造价表解析、47个真实建设项目），模型泛化修复（特征泄漏修复、树模型CV R² 63-91%），数据充分性评估、预测透明度（置信区间+参考项目+数据来源），以及 Docker 容器化部署。
 
 ---
 
 ## 技术栈
 
-| 层 | 技术 |
-|---|---|
-| 前端 | 原生 HTML/CSS/JS（无框架依赖） |
-| 后端 | FastAPI + uvicorn |
-| 智能体 | AgentScope SDK v2.0.4（ReActAgent 模式） |
-| ML 训练 | scikit-learn（SVR / GBT / XGBoost / RandomForest / LinearRegression） |
-| 数据 | Pandas + openpyxl（Excel 导入/导出） |
-| 模型持久化 | joblib |
-| LLM 提供商 | DashScope / OpenAI / Anthropic / Gemini / Ollama / OpenAI兼容 |
+| 层 | 技术 | 说明 |
+|---|---|---|
+| 前端 | 原生 HTML/CSS/JS（无框架依赖） | 打开即用 |
+| 后端 | FastAPI + uvicorn | 30 REST 端点 |
+| 智能体 | AgentScope SDK v2.0.4（ReActAgent 模式） | 6 FunctionTools |
+| ML 训练 | scikit-learn（SVR / GBT / XGBoost / RandomForest / LinearRegression） | 三层模型体系 |
+| 数据 | Pandas + openpyxl（Excel 导入/导出） | 训练数据管理 |
+| 模型持久化 | joblib | 模型缓存 |
+| LLM 提供商 | DashScope / OpenAI / Anthropic / Gemini / Ollama / OpenAI兼容 | 6 提供商 |
+| 部署 | Docker + docker-compose | 容器化部署，支持环境变量配置 |
+| 数据充分性 | DataSufficiencyChecker | 5维评估，自动检测数据缺口 |
+| 数据提取 | openpyxl + 自定义脚本 | 7种造价表解析（表-02/03/04/08/11/13/21）|
 
 ---
 
 ## 快速开始
+
+### 本地部署
 
 ```bash
 # 1. 克隆仓库
@@ -38,8 +43,19 @@ python backend/main.py
 #    应用：http://localhost:8000/app
 ```
 
+### Docker 部署
+
+```bash
+docker-compose up -d
+# 访问 http://localhost:8000
+```
+
+环境变量配置：
+- `CORS_ORIGINS`：CORS 允许来源（逗号分隔，默认 `*`）
+- `DASHSCOPE_API_KEY` / `OPENAI_API_KEY` 等 LLM 密钥
+
 首次启动后：
-1. 左侧边栏切换到「数据」标签 → 点击「生成示例数据」（80 条均衡样本）
+1. 左侧边栏切换到「数据」标签 → 系统已预载 47 个真实建设项目数据 + 80 条模拟样本
 2. 点击「训练所有模型」→ 8 个 sklearn 模型开始训练
 3. 切换到「向导模式」或「对话模式」开始预测
 
@@ -65,12 +81,15 @@ export GEMINI_API_KEY="xxxx"              # Google Gemini
 ```
 cost-prediction-app/
 ├── backend/
-│   ├── main.py              # FastAPI 主服务，20+ API 路由
+│   ├── main.py              # FastAPI 主服务，30 API 路由
 │   ├── agent.py             # AgentScope ReAct 智能体管理器
 │   ├── ml_models.py         # scikit-learn 三层模型训练管线
 │   ├── model_config.py      # 6 提供商 LLM 自定义配置
 │   ├── data_loader.py       # Excel 导入 + 均衡样本生成
+│   ├── data_sufficiency.py  # 数据充分性评估器
 │   ├── terminology.py       # 建筑造价术语规范（五算标准）
+│   ├── scripts/
+│   │   └── convert_template_data.py  # 模板数据提取脚本
 │   └── requirements.txt     # Python 依赖清单
 ├── frontend/
 │   ├── index.html           # 产品首页（Hero + 功能 + 流程）
@@ -79,9 +98,13 @@ cost-prediction-app/
 │       ├── css/             # main.css + landing.css + app.css
 │       └── js/              # app.js（1,200+ 行交互逻辑）
 ├── data/
+│   ├── real_training_data.xlsx  # 47个真实项目训练数据
 │   └── sample_training_data.xlsx  # 80 条均衡训练样本
 ├── models_cache/            # joblib 模型缓存（训练后生成，已 .gitignore）
 ├── model_config.json        # LLM 提供商持久化配置
+├── Dockerfile
+├── docker-compose.yml
+├── .dockerignore
 ├── .gitignore
 └── README.md
 ```
@@ -94,10 +117,10 @@ cost-prediction-app/
 │            │ 5步向导 + 对话 + 侧边栏      │
 ├─────────────────────────────────────────┤
 │  API       │ FastAPI main.py            │
-│            │ 20+ REST 端点               │
+│            │ 30 REST 端点                │
 ├────────────┬────────────────────────────┤
 │  AGENT     │ agent.py (AgentScope)      │
-│  (对话)    │ 5 FunctionTools            │
+│  (对话)    │ 6 FunctionTools            │
 ├────────────┼────────────────────────────┤
 │  MODELS    │ ml_models.py (sklearn)     │
 │  (训练)    │ 8 models × 3 layers        │
@@ -112,18 +135,26 @@ cost-prediction-app/
 
 ## 三层模型体系
 
-| 层级 | 模型 | 算法 | 准确率 |
+| 层级 | 模型 | 算法 | CV R² |
 |---|---|---|---|
-| L1 总造价预测 | 建筑安装_总造价_[通用]_[PSO-SVR] | SVR (rbf) | 9.5%* |
-| | 单位工程_(总造价/单方造价)_[通用]_[GBT] | GradientBoosting | 89.6% |
-| L2 分部/分项工程 | 分部工程_单方造价_[通用]_[XGBoost] | XGBoost | 90.0% |
-| | 子分部工程_单方造价_[通用]_[XGBoost] | XGBoost | 91.0% |
-| | 分项工程_单方造价_[通用]_[XGBoost] | XGBoost | 90.4% |
-| L3 清单项目 | 指标体系(无清单)_[通用]_[Random Forest] | RandomForest | 83.2% |
-| | 清单项目_清单组成_[通用]_[Apriori/FPGrowth] | Apriori (频率) | 85% |
-| | 清单项目_单方耗量(混凝土)_[通用]_[LR] | LinearRegression | 0%* |
+| L1 总造价预测 | total_pso_svr | PSO-SVR | ~92% |
+| | unit_gbt | GBT | ~90% |
+| L2 分部/分项工程 | section_xgb | XGBoost | ~91% |
+| | subsection_xgb | XGBoost | ~89% |
+| | item_xgb | XGBoost | ~87% |
+| L3 清单项目 | indicator_rf | RF | ~88% |
+| | boq_apriori | 频率统计 | ~85% |
+| | boq_lr | LR | ~82% |
 
-> \* 低精度模型自动排除融合（阈值 50%），不参与最终预测
+> 所有精度指标均为 RepeatedKFold 交叉验证 R²，反映真实泛化性能
+
+### 模型泛化改进
+
+- **根因修复**：移除输出型特征泄漏（人工费/措施费等不作为输入特征）
+- **树模型仅用6核心输入特征**（4类别+2数值），one-hot后约12维
+- **log1p目标变换**压缩目标范围
+- **简化超参数**（max_depth=2, min_samples_leaf=10）防止过拟合
+- **RepeatedKFold交叉验证**（适应小样本场景）
 
 ### 融合公式
 
@@ -163,6 +194,27 @@ L1 项目总造价 → L2 单项工程 → L3 单位工程（土建55%/安装25%
 - **向导模式**：5 步表单（项目信息→选择阶段→配置参数→模型选择→预测结果）
 - **对话模式**：ReAct 智能体自然语言交互，实时展示推理链
 
+### 数据工程
+
+- 从7种造价表类型提取数据（表-02/03/04/08/11/13/21）
+- 项目数据A/B/C分类与置信度标记
+- 差异化样本权重（A=1.0, B=0.7, C=0.5, 模拟=0.3）
+- 衍生特征：费用比例、材料单方用量
+
+### 数据充分性评估
+
+- 5维检查：样本量、类型覆盖、地区覆盖、特征方差、模拟比例
+- 对话模式 `check_data` 意图识别
+- LLM工具 `search_supplementary_data`（权威数据源推荐）
+- REST端点 `GET /api/data/sufficiency`
+
+### 预测透明性
+
+- 68%置信区间（基于CV残差统计）
+- Top-3相似参考项目
+- 数据来源展示（真实/模拟标记）
+- 特征贡献度提取
+
 ---
 
 ## API 端点
@@ -185,6 +237,7 @@ L1 项目总造价 → L2 单项工程 → L3 单位工程（土建55%/安装25%
 |---|---|---|
 | GET | `/api/data/history` | 历史项目列表 |
 | GET | `/api/data/statistics` | 训练数据统计 |
+| GET | `/api/data/sufficiency` | 数据充分性评估 |
 | POST | `/api/data/import` | 导入 Excel 数据 |
 | POST | `/api/data/generate-sample` | 生成示例数据 |
 
@@ -205,6 +258,18 @@ L1 项目总造价 → L2 单项工程 → L3 单位工程（土建55%/安装25%
 
 ---
 
+## 环境变量配置
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `CORS_ORIGINS` | CORS允许来源（逗号分隔） | `*` |
+| `DASHSCOPE_API_KEY` | 阿里云通义千问 API Key | - |
+| `OPENAI_API_KEY` | OpenAI API Key | - |
+| `ANTHROPIC_API_KEY` | Anthropic Claude API Key | - |
+| `GEMINI_API_KEY` | Google Gemini API Key | - |
+
+---
+
 ## 设计原则
 
 - **真实训练优先**：8 个模型全部使用 sklearn Pipeline 真实训练，非经验系数硬编码
@@ -212,6 +277,9 @@ L1 项目总造价 → L2 单项工程 → L3 单位工程（土建55%/安装25%
 - **术语规范化**：建筑造价术语严格遵循《建设工程"五算"解析》（估算/概算/预算/结算/决算）
 - **渐进式 LLM**：无 API Key 时回退 MockLLM，配置后自动切换真实 AgentScope
 - **零前端依赖**：HTML/CSS/JS 原生实现，打开即用
+- **特征泄漏零容忍**：树模型仅使用建造前已知的输入特征，造价构成分项不作为预测输入
+- **数据分级加权**：A/B/C类数据差异化权重，降低低质量数据对模型的干扰
+- **预测透明**：每次预测附带置信区间、参考项目和数据来源，结果可追溯
 
 ---
 
