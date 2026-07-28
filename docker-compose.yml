@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./models_cache:/app/models_cache
+      - ./model_config.json:/app/model_config.json
+    environment:
+      - PYTHONPATH=/app
+      - CORS_ORIGINS=http://localhost:8000,http://localhost:3000
+      # LLM API Keys (通过环境变量或.env文件配置)
+      # - DASHSCOPE_API_KEY=your_key_here
+      # - OPENAI_API_KEY=your_key_here
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

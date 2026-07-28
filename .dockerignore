@@ -1,0 +1,10 @@
+__pycache__
+*.pyc
+.git
+.gitignore
+venv/
+*.egg-info
+.env
+models_cache/*.joblib
+data/history.json
+README.md

@@ -40,6 +40,7 @@ from terminology import (
     BASE_UNIT_PRICE, STRUCTURE_COEFFICIENT, DECORATION_COEFFICIENT,
     REGION_COST_INDEX
 )
+from data_sufficiency import DataSufficiencyChecker
 
 
 REACT_SYSTEM_PROMPT = """你是「北辰造价助手」——专业的建筑工程造价预测 ReAct 智能体。
@@ -90,6 +91,8 @@ class MockLLM:
             return "cost_breakdown"
         if any(kw in text for kw in ["相似", "类似", "历史项目"]):
             return "find_similar"
+        if any(kw in text for kw in ["数据够", "数据不足", "样本量", "数据充分", "数据质量", "够不够"]):
+            return "check_data"
         return "general"
 
     def extract_params(self, text: str) -> Dict:
@@ -154,6 +157,7 @@ class MockLLM:
             "list_models": "用户希望查看模型列表。我将调用 list_models 工具展示所有模型状态。",
             "cost_breakdown": "用户希望了解成本结构。我将调用 predict_cost 工具并展示六层级分解。",
             "find_similar": "用户希望查找相似历史项目。我将调用 find_similar_projects 工具。",
+            "check_data": "用户希望检查数据充分性。我将调用 DataSufficiencyChecker 评估当前训练数据是否足够。",
             "general": "用户的输入较为通用，我将尝试理解其意图并提供有针对性的引导。"
         }
         return m.get(intent, m["general"])
@@ -219,7 +223,7 @@ class CostAgentManager:
             all_models = factory.list_models()
             trained_ids = [m["id"] for m in all_models if m.get("is_trained")]
             selected = trained_ids if trained_ids else ["total_pso_svr", "section_xgb", "indicator_rf"]
-            result = predict_with_real_models(factory, project, selected)
+            result = predict_with_real_models(factory, project, selected, data_loader=data_loader)
             summary = f"预测完成：总造价 {_format_money(result['fused_total_cost'])}，单方造价 {result['fused_unit_price']:.0f} 元/m²，综合精度 {result['average_accuracy']}%"
             return ToolResponse(
                 output=[{"type": "text", "text": summary + "\n" + json.dumps(result, ensure_ascii=False, default=str)}]
@@ -269,12 +273,29 @@ class CostAgentManager:
             explanation = _explain_term(term)
             return ToolResponse(output=[{"type": "text", "text": explanation}])
 
+        async def search_supplementary_data(query: str = "construction_cost") -> ToolResponse:
+            """搜索权威工程造价数据源以补充训练数据。
+
+            Args:
+                query: 搜索关键词（默认 construction_cost）
+            """
+            sources = DataSufficiencyChecker.get_authoritative_sources()
+            result = "## 权威造价数据源\n\n"
+            for s in sources:
+                result += f"- **{s['name']}** ({s['type']})"
+                if 'url' in s:
+                    result += f" - {s['url']}"
+                result += f"\n  {s.get('description', '')}\n"
+            result += "\n> 提示：从以上来源获取数据后，可通过「导入Excel」功能添加到训练集。"
+            return ToolResponse(output=[{"type": "text", "text": result}])
+
         tools = [
             FunctionTool(predict_cost),
             FunctionTool(train_models),
             FunctionTool(list_models),
             FunctionTool(find_similar_projects),
             FunctionTool(explain_terminology),
+            FunctionTool(search_supplementary_data),
         ]
         return Toolkit(tools=tools)
 
@@ -380,6 +401,17 @@ class CostAgentManager:
         final_answer = ""
 
         if intent == "predict":
+            # Check data sufficiency first
+            checker = DataSufficiencyChecker()
+            df = self.data_loader.to_dataframe()
+            sufficiency_warning = ""
+            if df is not None:
+                report = checker.assess(df)
+                if not report.sufficient:
+                    sufficiency_warning = f"\n\n> ⚠️ **数据充分性警告**：当前数据评分 {report.score}/100，可能影响预测可靠性。"
+                    if report.issues:
+                        sufficiency_warning += "\n> 主要问题：" + "；".join(report.issues[:3])
+
             from ml_models import predict_with_real_models
             all_models = self.model_factory.list_models()
             trained_ids = [m["id"] for m in all_models if m.get("is_trained")]
@@ -389,9 +421,11 @@ class CostAgentManager:
             else:
                 selected = ["total_pso_svr", "section_xgb", "indicator_rf"]
                 backend_note = "未训练（仅占位）"
-            prediction = predict_with_real_models(self.model_factory, params, selected)
+            prediction = predict_with_real_models(self.model_factory, params, selected, data_loader=self.data_loader)
             tool_result = prediction
             final_answer = self._format_prediction(prediction, backend_note)
+            if sufficiency_warning:
+                final_answer += sufficiency_warning
             react_steps.append({
                 "step": "observation",
                 "content": f"预测完成：总造价 {_format_money(prediction['fused_total_cost'])}，单方造价 {prediction['fused_unit_price']:.0f} 元/m²"
@@ -438,12 +472,22 @@ class CostAgentManager:
             tool_result = {"similar_projects": similar}
             final_answer = self._format_similar(similar)
 
+        elif intent == "check_data":
+            checker = DataSufficiencyChecker()
+            df = self.data_loader.to_dataframe()
+            if df is None or len(df) == 0:
+                final_answer = "当前无任何训练数据。请先导入 Excel 项目数据或生成示例数据。"
+            else:
+                report = checker.assess(df)
+                final_answer = self._format_sufficiency_report(report)
+            tool_result = {"sufficient": report.sufficient, "score": report.score} if 'report' in dir() else None
+
         elif intent == "cost_breakdown":
             from ml_models import predict_with_real_models
             all_models = self.model_factory.list_models()
             trained_ids = [m["id"] for m in all_models if m.get("is_trained")]
             selected = trained_ids[:5] if trained_ids else ["total_pso_svr"]
-            prediction = predict_with_real_models(self.model_factory, params, selected)
+            prediction = predict_with_real_models(self.model_factory, params, selected, data_loader=self.data_loader)
             tool_result = prediction
             final_answer = self._format_breakdown(prediction)
 
@@ -477,6 +521,25 @@ class CostAgentManager:
             "history_count": len(history) + 2,
         }
 
+    def _format_sufficiency_report(self, report) -> str:
+        text = "## 数据充分性评估\n\n"
+        text += f"**评分**: {report.score}/100 {'✅ 基本充分' if report.sufficient else '⚠️ 不足'}\n\n"
+        text += f"**样本统计**: 总计{report.total_samples}条（真实{report.real_samples}条，模拟{report.simulated_samples}条）\n\n"
+        if report.issues:
+            text += "### 发现的问题\n"
+            for issue in report.issues:
+                text += f"- ⚠️ {issue}\n"
+        if report.recommendations:
+            text += "\n### 改进建议\n"
+            for rec in report.recommendations:
+                text += f"- 💡 {rec}\n"
+        if report.category_coverage:
+            text += "\n### 建筑类型覆盖\n"
+            for cat, count in report.category_coverage.items():
+                status = "✅" if count >= 5 else "⚠️"
+                text += f"- {status} {cat}: {count}条\n"
+        return text
+
     def _format_prediction(self, prediction: Dict, backend: str = "") -> str:
         total = prediction["fused_total_cost"]
         unit = prediction["fused_unit_price"]
@@ -494,6 +557,25 @@ class CostAgentManager:
         text += f"- **使用模型数**: {prediction['model_count']}\n"
         if backend:
             text += f"- **训练后端**: {backend}\n"
+
+        # NEW: 置信区间
+        ci = prediction.get("confidence_interval")
+        if ci and ci.get("lower") != ci.get("upper"):
+            text += f"\n### 预测区间\n"
+            text += f"- 单方造价区间: {ci['lower']:,.0f} ~ {ci['upper']:,.0f} 元/m²（置信度 {ci.get('level', '68%')}）\n"
+
+        # NEW: 参考项目
+        ref_projects = prediction.get("reference_projects", [])
+        if ref_projects:
+            text += f"\n### 参考项目\n"
+            for p in ref_projects:
+                text += f"- {p['name']} — {p.get('area', 0):,.0f}m², {p.get('unit_price', 0):,.0f}元/m²\n"
+
+        # NEW: 数据充分性
+        evidence = prediction.get("model_evidence")
+        if evidence and evidence.get("data_sufficiency_score", 100) < 60:
+            text += f"\n> ⚠️ 训练数据不足（评分{evidence['data_sufficiency_score']:.0f}），预测结果仅供参考\n"
+
         text += "\n### 费用构成\n"
         if "composition" in prediction:
             for cat, data in prediction["composition"].items():
@@ -504,6 +586,14 @@ class CostAgentManager:
             if m:
                 status = f"准确率 {m.info.accuracy}%" if m.info.is_trained else "未训练"
                 text += f"- {m.info.name}（{m.info.algorithm}）— {status}\n"
+
+        # Data sources
+        if "data_sources" in prediction:
+            text += "\n### 数据来源\n"
+            for src in prediction["data_sources"]:
+                icon = "📊" if src.get("source_type") == "real" else "🔧"
+                text += f"- {icon} {src.get('description', src.get('source_file', '未知'))}: {src.get('sample_count', '?')}条\n"
+
         return text
 
     def _format_similar(self, similar: List[Dict]) -> str:

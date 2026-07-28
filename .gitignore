@@ -34,5 +34,11 @@ Desktop.ini
 test_*.json
 verify_*.py
 
+# LLM配置（含API Key，安全考虑必须排除）
+model_config.json
+
+# 运行时输出
+output/
+
 # AgentScope
 agent_scope_cache/

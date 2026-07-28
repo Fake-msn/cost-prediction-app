@@ -38,9 +38,17 @@ os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 app = FastAPI(title="AI 建筑工程造价预测系统", version="1.0.0")
+
+# CORS 配置
+# 生产环境通过环境变量 CORS_ORIGINS 配置，逗号分隔，例如：
+#   CORS_ORIGINS=https://example.com,https://app.example.com
+# 开发环境默认允许所有来源（"*"）
+_cors_origins_raw = os.environ.get("CORS_ORIGINS", "*")
+cors_origins = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -53,18 +61,72 @@ model_factory = RealModelFactory(models_dir=MODELS_CACHE_DIR)
 model_config_mgr = ModelConfigManager()
 cost_agent = CostAgentManager(model_factory, data_loader, model_config_mgr)
 
-# 启动时自动加载已有的示例训练数据
+# 启动时自动加载已有的训练数据（避免重复加载）
+_existing_sources = {h.get('source_file') for h in data_loader.history}
+
+_real_path = os.path.join(DATA_DIR, "real_training_data.xlsx")
+if os.path.exists(_real_path) and "real_training_data.xlsx" not in _existing_sources:
+    try:
+        with open(_real_path, "rb") as _f:
+            data_loader.import_from_excel(_f.read(), "real_training_data.xlsx")
+    except Exception:
+        pass
+
 _sample_path = os.path.join(DATA_DIR, "sample_training_data.xlsx")
-if os.path.exists(_sample_path) and not data_loader.history:
+if os.path.exists(_sample_path) and "sample_training_data.xlsx" not in _existing_sources:
     try:
         with open(_sample_path, "rb") as _f:
             data_loader.import_from_excel(_f.read(), "sample_training_data.xlsx")
     except Exception:
         pass
 
-# 内存会话存储
-SESSIONS: Dict[str, List[Dict]] = {}
-PROJECTS: Dict[str, Dict] = {}
+# 内存会话存储（带 JSON 持久化）
+SESSIONS_FILE = os.path.join(DATA_DIR, "sessions.json")
+PROJECTS_FILE = os.path.join(DATA_DIR, "projects.json")
+
+
+def _load_sessions() -> Dict[str, List[Dict]]:
+    """从 JSON 文件加载会话"""
+    try:
+        if os.path.exists(SESSIONS_FILE):
+            with open(SESSIONS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"[警告] 加载 sessions.json 失败: {e}")
+    return {}
+
+
+def _save_sessions():
+    """将会话保存到 JSON 文件"""
+    try:
+        with open(SESSIONS_FILE, "w", encoding="utf-8") as f:
+            json.dump(SESSIONS, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[警告] 保存 sessions.json 失败: {e}")
+
+
+def _load_projects() -> Dict[str, Dict]:
+    """从 JSON 文件加载项目"""
+    try:
+        if os.path.exists(PROJECTS_FILE):
+            with open(PROJECTS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"[警告] 加载 projects.json 失败: {e}")
+    return {}
+
+
+def _save_projects():
+    """将项目保存到 JSON 文件"""
+    try:
+        with open(PROJECTS_FILE, "w", encoding="utf-8") as f:
+            json.dump(PROJECTS, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[警告] 保存 projects.json 失败: {e}")
+
+
+SESSIONS: Dict[str, List[Dict]] = _load_sessions()
+PROJECTS: Dict[str, Dict] = _load_projects()
 
 
 # ==================== Pydantic 模型 ====================
@@ -201,7 +263,7 @@ async def predict_project(req: ProjectRequest):
     trained_ids = {m["id"] for m in all_models if m.get("is_trained")}
     selected = [mid for mid in req.selected_models if mid in trained_ids] or req.selected_models
 
-    result = predict_with_real_models(model_factory, project, selected)
+    result = predict_with_real_models(model_factory, project, selected, data_loader=data_loader)
     result["stage"] = req.stage
     result["stage_info"] = COST_STAGES.get(req.stage, {})
     result["predicted_at"] = datetime.now().isoformat()
@@ -214,6 +276,7 @@ async def predict_project(req: ProjectRequest):
         "result": result,
         "created_at": datetime.now().isoformat()
     }
+    _save_projects()
     result["project_id"] = project_id
 
     return result
@@ -231,6 +294,7 @@ async def chat_with_agent(req: ChatRequest):
     # 更新会话历史
     history.append({"role": "user", "content": req.message})
     history.append({"role": "assistant", "content": result["reply"]})
+    _save_sessions()
 
     return {
         "session_id": req.session_id,
@@ -261,7 +325,34 @@ async def list_sessions():
 async def delete_session(session_id: str):
     if session_id in SESSIONS:
         del SESSIONS[session_id]
+        _save_sessions()
     return {"success": True}
+
+
+@app.delete("/api/chat/sessions")
+async def delete_all_sessions():
+    """删除所有会话"""
+    count = len(SESSIONS)
+    SESSIONS.clear()
+    _save_sessions()
+    return {"success": True, "deleted_count": count}
+
+
+@app.delete("/api/models/cache")
+async def clear_model_cache():
+    """清除本地模型缓存文件"""
+    import glob
+    deleted = []
+    if os.path.isdir(MODELS_CACHE_DIR):
+        for f in glob.glob(os.path.join(MODELS_CACHE_DIR, "*.joblib")):
+            try:
+                os.remove(f)
+                deleted.append(os.path.basename(f))
+            except Exception as e:
+                print(f"Failed to delete {f}: {e}")
+    # 重置模型工厂状态
+    model_factory._models = {}
+    return {"success": True, "deleted_count": len(deleted), "deleted_files": deleted}
 
 
 @app.post("/api/data/import")
@@ -285,6 +376,19 @@ async def get_history(limit: int = 50):
 @app.get("/api/data/statistics")
 async def get_statistics():
     return data_loader.get_statistics()
+
+
+@app.get("/api/data/sufficiency")
+async def get_data_sufficiency():
+    """数据充分性评估"""
+    from data_sufficiency import DataSufficiencyChecker
+    from dataclasses import asdict
+    df = data_loader.to_dataframe()
+    if df is None or len(df) == 0:
+        return {"sufficient": False, "score": 0, "issues": ["无任何训练数据"], "recommendations": ["请先导入Excel数据"]}
+    checker = DataSufficiencyChecker()
+    report = checker.assess(df)
+    return asdict(report)
 
 
 @app.post("/api/data/generate-sample")

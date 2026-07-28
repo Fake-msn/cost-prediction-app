@@ -60,6 +60,24 @@ class DataLoader:
                 "optional": OPTIONAL_FIELDS
             }
 
+        # 计算样本权重 _sample_weight
+        if 'source_type' in df.columns:
+            weight_map = {
+                ('A', 'high'): 1.0,
+                ('B', 'medium'): 0.7,
+                ('C', 'low'): 0.5,
+            }
+            df['_sample_weight'] = df.apply(
+                lambda r: weight_map.get(
+                    (str(r.get('source_type', '')), str(r.get('data_confidence', ''))),
+                    0.7
+                ),
+                axis=1
+            )
+        else:
+            # 模拟数据或无来源信息的数据
+            df['_sample_weight'] = 0.3
+
         imported = []
         for idx, row in df.iterrows():
             record = {

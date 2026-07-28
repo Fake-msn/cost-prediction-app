@@ -37,6 +37,9 @@
             <div class="sidebar-content" id="tab-sessions">
                 <button class="btn btn-primary btn-block" id="btn-new-session">+ 新建会话</button>
                 <div class="session-list" id="session-list"></div>
+                <div class="sidebar-danger-zone">
+                    <button class="btn btn-danger btn-block btn-sm" id="btn-delete-all-sessions">🗑 删除所有会话</button>
+                </div>
             </div>
 
             <div class="sidebar-content" id="tab-data" style="display:none">
@@ -79,6 +82,9 @@
                 <div class="data-actions" style="margin-top:12px;">
                     <button class="btn btn-primary btn-block" id="btn-train-all">
                         🚀 训练所有模型
+                    </button>
+                    <button class="btn btn-danger btn-block btn-sm" id="btn-clear-cache">
+                        🗑 清除模型缓存
                     </button>
                 </div>
                 <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none">
@@ -168,6 +174,9 @@
                             <path d="M3 10L17 3L10 17L9 11L3 10Z" fill="currentColor"/>
                         </svg>
                     </button>
+                </div>
+                <div class="chat-actions-bar">
+                    <button class="btn-chat-action" id="btn-clear-chat">🗑 清空对话</button>
                 </div>
             </div>
         </main>

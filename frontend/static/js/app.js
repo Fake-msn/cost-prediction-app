@@ -115,6 +115,9 @@ function bindEvents() {
     document.getElementById('file-input').addEventListener('change', handleFileImport);
     document.getElementById('btn-generate-sample').addEventListener('click', generateSampleData);
     document.getElementById('btn-view-stats').addEventListener('click', showDataStats);
+    document.getElementById('btn-clear-chat').addEventListener('click', clearCurrentChat);
+    document.getElementById('btn-delete-all-sessions').addEventListener('click', deleteAllSessions);
+    document.getElementById('btn-clear-cache').addEventListener('click', clearModelCache);
     // 弹窗关闭
     document.querySelectorAll('.modal-close').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -616,6 +619,12 @@ function renderStep5() {
                     <span>建筑面积: ${r.project.area.toLocaleString()} m²</span>
                     <span>单方造价: <strong>${unitPrice.toLocaleString()} 元/m²</strong></span>
                 </div>
+                ${r.confidence_interval && r.confidence_interval.lower !== r.confidence_interval.upper ? `
+                <div class="confidence-range">预测区间: ${r.confidence_interval.lower.toLocaleString()} ~ ${r.confidence_interval.upper.toLocaleString()} 元/m²（置信度 ${r.confidence_interval.level || '68%'}）</div>
+                ` : ''}
+                ${r.model_evidence && r.model_evidence.data_sufficiency_score < 60 ? `
+                <div class="data-warning">⚠️ 训练数据不足（评分${r.model_evidence.data_sufficiency_score}），预测结果仅供参考</div>
+                ` : ''}
             </div>
             <div class="result-summary-actions">
                 <button class="btn btn-ghost btn-sm" onclick="adjustParams()">⚙ 调整指标</button>
@@ -623,6 +632,26 @@ function renderStep5() {
                 <button class="btn btn-primary btn-sm" onclick="exportReport()">↓ 导出报告</button>
             </div>
         </div>
+
+        ${r.reference_projects && r.reference_projects.length > 0 ? `
+        <div class="reference-projects">
+            <h4>参考项目</h4>
+            <ul>
+                ${r.reference_projects.map(p => `<li>${p.name} — ${p.area.toLocaleString()}m², ${p.unit_price.toLocaleString()}元/m²</li>`).join('')}
+            </ul>
+        </div>
+        ` : ''}
+
+        ${r.data_sources && r.data_sources.length > 0 ? `
+        <div class="data-sources">
+            <h4>数据来源</h4>
+            <ul>
+            ${r.data_sources.map(s => `
+                <li>${s.source_type === 'real' ? '📊' : '🔧'} ${s.description}: ${s.sample_count}条</li>
+            `).join('')}
+            </ul>
+        </div>
+        ` : ''}
 
         <div class="result-tabs">
             <button class="result-tab active" data-tab="indicator">📈 指标体系</button>
@@ -881,6 +910,54 @@ function createNewSession() {
     switchMode('chat');
 }
 
+function clearCurrentChat() {
+    const messages = document.getElementById('chat-messages');
+    if (!messages.querySelector('.chat-message')) return;
+    if (!confirm('确定清空当前对话记录？')) return;
+    messages.innerHTML = `
+        <div class="chat-welcome">
+            <div class="welcome-icon">🤖</div>
+            <h3>北辰造价助手</h3>
+            <p>对话已清空，可以开始新的对话</p>
+        </div>
+    `;
+    // 调用后端删除当前会话
+    api(`/api/chat/sessions/${currentSessionId}`, { method: 'DELETE' }).then(() => {
+        loadSessions();
+    }).catch(() => {});
+    toast('对话已清空');
+}
+
+async function deleteAllSessions() {
+    if (!confirm('确定删除所有会话记录？此操作不可恢复。')) return;
+    try {
+        await api('/api/chat/sessions', { method: 'DELETE' });
+        currentSessionId = 'default';
+        document.getElementById('chat-messages').innerHTML = `
+            <div class="chat-welcome">
+                <div class="welcome-icon">🤖</div>
+                <h3>北辰造价助手</h3>
+                <p>所有会话已删除</p>
+            </div>
+        `;
+        await loadSessions();
+        toast('所有会话已删除');
+    } catch (e) {
+        toast('删除失败：' + e.message, 'error');
+    }
+}
+
+async function clearModelCache() {
+    if (!confirm('确定清除所有本地模型缓存文件？清除后需要重新训练模型。')) return;
+    try {
+        const result = await api('/api/models/cache', { method: 'DELETE' });
+        toast(`已清除 ${result.deleted_count} 个缓存文件`);
+        await loadTrainStatus();
+    } catch (e) {
+        toast('清除失败：' + e.message, 'error');
+    }
+}
+
 // ============================================================
 // 对话功能
 // ============================================================
@@ -944,7 +1021,9 @@ function appendMessage(role, content, reactSteps) {
     `;
     if (reactSteps && reactSteps.length > 0) {
         const trace = document.createElement('div');
-        trace.style.marginLeft = '44px';
+        trace.style.marginTop = '12px';
+        trace.style.paddingTop = '12px';
+        trace.style.borderTop = '1px solid var(--border)';
         trace.innerHTML = `
             <div class="react-trace">
                 <div style="font-weight:500; margin-bottom:6px;">🧠 ReAct 推理过程</div>
@@ -956,7 +1035,12 @@ function appendMessage(role, content, reactSteps) {
                 `).join('')}
             </div>
         `;
-        div.appendChild(trace);
+        const bubble = div.querySelector('.chat-bubble.assistant');
+        if (bubble) {
+            bubble.appendChild(trace);
+        } else {
+            div.appendChild(trace);
+        }
     }
     document.getElementById('chat-messages').appendChild(div);
     document.getElementById('chat-messages').scrollTop = document.getElementById('chat-messages').scrollHeight;
@@ -1132,6 +1216,11 @@ async function trainAllModels() {
 // ============================================================
 let currentLLMProviders = [];
 let activeLLMProvider = '';
+let configuringProvider = '';
+
+function findProvider(key) {
+    return currentLLMProviders.find(p => p.provider === key);
+}
 
 async function openLLMConfig() {
     try {
@@ -1151,7 +1240,7 @@ async function openLLMConfig() {
                 <select id="llm-active-select" style="margin-bottom:8px;">
                     <option value="">— 未激活（使用 MockLLM）—</option>
                     ${currentLLMProviders.map(p => `
-                        <option value="${p.provider}" ${p.provider === activeLLMProvider ? 'selected' : ''} ${!p.is_configured ? 'disabled' : ''}>
+                        <option value="${p.provider}" ${p.provider === activeLLMProvider ? 'selected' : ''}>
                             ${p.name} ${p.is_configured ? '✓' : '(未配置)'}
                         </option>
                     `).join('')}
@@ -1164,21 +1253,118 @@ async function openLLMConfig() {
         `;
         document.getElementById('llm-config-content').innerHTML = html;
 
-        // 切换激活时只显示对应表单
+        // 切换激活时的逻辑
         document.getElementById('llm-active-select').addEventListener('change', (e) => {
-            activeLLMProvider = e.target.value;
-            document.querySelectorAll('.provider-form').forEach(f => {
-                f.style.display = f.dataset.provider === activeLLMProvider ? 'block' : 'none';
-            });
+            const selectedProvider = e.target.value;
+            activeLLMProvider = selectedProvider;
+            configuringProvider = '';
+            // 清理之前配置模式注入的操作按钮
+            document.querySelectorAll('.provider-form .configure-actions').forEach(el => el.remove());
+
+            if (!selectedProvider) {
+                // 选择了"未激活"
+                document.querySelectorAll('.provider-form').forEach(f => f.style.display = 'none');
+            } else {
+                // 任何已选 provider：直接显示表单
+                const provider = findProvider(selectedProvider);
+                document.querySelectorAll('.provider-form').forEach(f => {
+                    f.style.display = f.dataset.provider === selectedProvider ? 'block' : 'none';
+                });
+                // 未配置的 provider：注入"保存并激活"按钮
+                if (provider && !provider.is_configured) {
+                    showProviderConfigureMode(selectedProvider);
+                }
+            }
         });
         // 初始显示
-        document.querySelectorAll('.provider-form').forEach(f => {
-            f.style.display = f.dataset.provider === activeLLMProvider ? 'block' : 'none';
-        });
+        updateLLMFormVisibility();
 
         document.getElementById('modal-llm').style.display = 'flex';
     } catch (e) {
         toast('加载配置失败：' + e.message, 'error');
+    }
+}
+
+function updateLLMFormVisibility() {
+    const provider = findProvider(activeLLMProvider);
+
+    if (!activeLLMProvider) {
+        document.querySelectorAll('.provider-form').forEach(f => f.style.display = 'none');
+    } else {
+        // 任何已选 provider：直接显示表单
+        document.querySelectorAll('.provider-form').forEach(f => {
+            f.style.display = f.dataset.provider === activeLLMProvider ? 'block' : 'none';
+        });
+        // 未配置的 provider：注入"保存并激活"按钮
+        if (provider && !provider.is_configured) {
+            showProviderConfigureMode(activeLLMProvider);
+        }
+    }
+}
+
+function showProviderConfigureMode(providerKey) {
+    configuringProvider = providerKey;
+    const provider = findProvider(providerKey);
+    if (!provider) return;
+
+    // 显示表单并注入"保存并激活"按钮
+    const form = document.querySelector(`.provider-form[data-provider="${providerKey}"]`);
+    if (form) {
+        form.style.display = 'block';
+        let actionDiv = form.querySelector('.configure-actions');
+        if (!actionDiv) {
+            actionDiv = document.createElement('div');
+            actionDiv.className = 'configure-actions';
+            actionDiv.style.cssText = 'margin-top:12px; display:flex; gap:8px;';
+            actionDiv.innerHTML = `
+                <button onclick="saveAndActivateProvider('${providerKey}')" style="flex:1; padding:8px 16px; background:var(--accent); color:white; border:none; border-radius:6px; cursor:pointer; font-weight:500;">
+                    保存并激活
+                </button>
+            `;
+            form.appendChild(actionDiv);
+        }
+    }
+}
+
+function hideProviderConfigureMode() {
+    configuringProvider = '';
+    // 移除注入的操作按钮，隐藏表单
+    document.querySelectorAll('.provider-form').forEach(f => {
+        const actionDiv = f.querySelector('.configure-actions');
+        if (actionDiv) actionDiv.remove();
+        f.style.display = 'none';
+    });
+}
+
+async function saveAndActivateProvider(providerKey) {
+    try {
+        // 收集表单数据
+        const modelEl = document.getElementById(`llm-model-${providerKey}`);
+        const keyEl = document.getElementById(`llm-key-${providerKey}`);
+        const urlEl = document.getElementById(`llm-url-${providerKey}`);
+        const config = {};
+        if (modelEl && modelEl.value) config.model_name = modelEl.value;
+        if (keyEl && keyEl.value) config.api_key = keyEl.value;
+        if (urlEl && urlEl.value) config.base_url = urlEl.value;
+
+        // 保存配置
+        if (Object.keys(config).length > 0) {
+            await api(`/api/llm/config/${providerKey}`, {
+                method: 'POST', body: JSON.stringify(config)
+            });
+        }
+
+        // 激活提供商
+        await api('/api/llm/active', {
+            method: 'POST', body: JSON.stringify({ provider: providerKey })
+        });
+
+        toast('配置已保存并激活');
+        configuringProvider = '';
+        await openLLMConfig();  // 刷新配置界面
+        await loadTrainStatus();
+    } catch (e) {
+        toast('保存失败：' + e.message, 'error');
     }
 }
 
