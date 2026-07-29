@@ -1,5 +1,6 @@
 """
 数据加载器 - Excel 批量导入历史项目训练数据
+支持 DuckDB 存储和查询
 """
 from __future__ import annotations
 import io
@@ -7,8 +8,15 @@ import os
 import json
 import random
 from typing import Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, date
 import pandas as pd
+
+# DuckDB 可选导入
+try:
+    import duckdb
+    HAS_DUCKDB = True
+except ImportError:
+    HAS_DUCKDB = False
 
 
 REQUIRED_FIELDS = [
@@ -25,16 +33,27 @@ OPTIONAL_FIELDS = [
 
 
 class DataLoader:
-    """训练数据加载器"""
+    """训练数据加载器 - 支持 Excel 和 DuckDB 双存储"""
 
-    def __init__(self, data_dir: str = "data"):
+    def __init__(self, data_dir: str = "data", use_duckdb: bool = True):
         self.data_dir = data_dir
         self.history: List[Dict] = []
+        self.use_duckdb = use_duckdb and HAS_DUCKDB
+        self.db_path = os.path.join(data_dir, 'cost_prediction.duckdb')
         os.makedirs(data_dir, exist_ok=True)
         self._load_existing()
 
     def _load_existing(self):
-        """加载已有数据"""
+        """加载已有数据 - 优先从 DuckDB，回退到 JSON"""
+        if self.use_duckdb and os.path.exists(self.db_path):
+            try:
+                self.history = self.load_from_duckdb()
+                if self.history:
+                    return
+            except Exception as e:
+                print(f"[DataLoader] DuckDB 加载失败，回退到 JSON: {e}")
+        
+        # 回退到 JSON
         history_file = os.path.join(self.data_dir, "history.json")
         if os.path.exists(history_file):
             try:
@@ -97,6 +116,14 @@ class DataLoader:
 
         self.history.extend(imported)
         self._save()
+        
+        # 同步写入 DuckDB
+        if self.use_duckdb:
+            try:
+                self._sync_to_duckdb(imported, filename)
+            except Exception as e:
+                print(f"[DataLoader] DuckDB 同步失败: {e}")
+        
         return {
             "success": True,
             "imported_count": len(imported),
@@ -109,18 +136,306 @@ class DataLoader:
         with open(history_file, "w", encoding="utf-8") as f:
             json.dump(self.history, f, ensure_ascii=False, indent=2)
 
+    def _sync_to_duckdb(self, records: List[Dict], source_file: str):
+        """将导入的记录同步到 DuckDB"""
+        if not HAS_DUCKDB or not records:
+            return
+        
+        conn = duckdb.connect(self.db_path)
+        try:
+            for rec in records:
+                project_id = rec.get('id', f"P{hash(str(rec)) % 10000:04d}")
+                conn.execute("""
+                    INSERT OR REPLACE INTO project_meta
+                    (project_id, name, building_type, structure_type, location,
+                     build_year, total_area, total_cost, unit_price, source_file,
+                     extraction_date, data_quality_grade, metadata_completeness,
+                     training_weight, confidence, field_source)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, [
+                    project_id,
+                    rec.get('项目名称', ''),
+                    rec.get('建筑类型', ''),
+                    rec.get('结构类型', ''),
+                    rec.get('所在地区', ''),
+                    int(rec.get('建造年份', 2023)) if rec.get('建造年份') else 2023,
+                    float(rec.get('总建筑面积', 0)) if rec.get('总建筑面积') else 0,
+                    float(rec.get('项目总造价', 0)) if rec.get('项目总造价') else 0,
+                    float(rec.get('单方造价', 0)) if rec.get('单方造价') else 0,
+                    source_file,
+                    date.today().isoformat(),
+                    rec.get('source_type', 'C'),
+                    0.5,
+                    rec.get('_sample_weight', 0.5),
+                    0.5,
+                    'imported_excel',
+                ])
+        finally:
+            conn.close()
+
+    def load_from_duckdb(self, limit: int = 1000) -> List[Dict]:
+        """从 DuckDB 加载项目数据"""
+        if not HAS_DUCKDB:
+            return []
+        
+        if not os.path.exists(self.db_path):
+            return []
+        
+        conn = duckdb.connect(self.db_path)
+        try:
+            # 检查表是否存在
+            tables = conn.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
+            ).fetchall()
+            table_names = [t[0] for t in tables]
+            
+            if 'project_meta' not in table_names:
+                return []
+            
+            rows = conn.execute(f"""
+                SELECT project_id, name, building_type, structure_type, location,
+                       build_year, total_area, total_cost, unit_price, source_file,
+                       data_quality_grade, training_weight, confidence
+                FROM project_meta
+                ORDER BY extraction_date DESC
+                LIMIT {limit}
+            """).fetchall()
+            
+            records = []
+            for row in rows:
+                records.append({
+                    'id': row[0],
+                    '项目名称': row[1],
+                    '建筑类型': row[2],
+                    '结构类型': row[3],
+                    '所在地区': row[4],
+                    '建造年份': row[5],
+                    '总建筑面积': row[6],
+                    '项目总造价': row[7],
+                    '单方造价': row[8],
+                    'source_file': row[9],
+                    'source_type': row[10],
+                    '_sample_weight': row[11],
+                    'data_confidence': 'high' if row[10] == 'A' else ('medium' if row[10] == 'B' else 'low'),
+                })
+            
+            return records
+        finally:
+            conn.close()
+
+    def get_boq_items(self, project_id: str = None) -> List[Dict]:
+        """从 DuckDB 获取清单条目"""
+        if not HAS_DUCKDB or not os.path.exists(self.db_path):
+            return []
+        
+        conn = duckdb.connect(self.db_path)
+        try:
+            if project_id:
+                rows = conn.execute("""
+                    SELECT item_id, project_id, unit_project, boq_code, item_name,
+                           spec_text, division, trade, unit, quantity,
+                           comp_unit_price, total_price, labor_fee
+                    FROM boq_items
+                    WHERE project_id = ? AND is_active = 1
+                """, [project_id]).fetchall()
+            else:
+                rows = conn.execute("""
+                    SELECT item_id, project_id, unit_project, boq_code, item_name,
+                           spec_text, division, trade, unit, quantity,
+                           comp_unit_price, total_price, labor_fee
+                    FROM boq_items
+                    WHERE is_active = 1
+                """).fetchall()
+            
+            return [
+                {
+                    'item_id': r[0],
+                    'project_id': r[1],
+                    'unit_project': r[2],
+                    'boq_code': r[3],
+                    'item_name': r[4],
+                    'spec_text': r[5],
+                    'division': r[6],
+                    'trade': r[7],
+                    'unit': r[8],
+                    'quantity': r[9],
+                    'comp_unit_price': r[10],
+                    'total_price': r[11],
+                    'labor_fee': r[12],
+                }
+                for r in rows
+            ]
+        finally:
+            conn.close()
+
     def get_history(self, limit: int = 50) -> List[Dict]:
         return self.history[-limit:]
 
     def to_dataframe(self):
-        """转换为 pandas DataFrame 供训练使用"""
-        if not self.history:
+        """转换为 pandas DataFrame 供训练使用（合并 DuckDB + Excel 数据）
+
+        合并策略：
+        - Excel 数据有完整费用构成，作为基础
+        - DuckDB 数据有 build_year、decoration_standard 等元数据
+        - 对同名项目，将 DuckDB 元数据合并到 Excel 行
+        - 仅在 DuckDB 中的项目，用规范比例估算费用构成
+        """
+        # 1. 加载 Excel 训练数据（含完整费用构成、材料用量）
+        excel_dfs = []
+        excel_files = [
+            os.path.join(self.data_dir, 'real_training_data.xlsx'),
+            os.path.join(self.data_dir, 'sample_training_data.xlsx'),
+        ]
+        for excel_path in excel_files:
+            if os.path.exists(excel_path):
+                try:
+                    xls = pd.read_excel(excel_path, engine='openpyxl')
+                    fname = os.path.basename(excel_path)
+                    if '_sample_weight' not in xls.columns:
+                        xls['_sample_weight'] = 1.0 if 'real' in fname else 0.7
+                    if 'source_type' not in xls.columns:
+                        xls['source_type'] = 'A' if 'real' in fname else 'B'
+                    excel_dfs.append(xls)
+                    print(f"[to_dataframe] 从 {fname} 加载 {len(xls)} 条记录")
+                except Exception as e:
+                    print(f"[to_dataframe] Excel 加载失败 {excel_path}: {e}")
+
+        # 2. 加载 DuckDB 元数据
+        db_df = None
+        if self.use_duckdb and os.path.exists(self.db_path):
+            try:
+                db_df = self._load_duckdb_dataframe()
+                if db_df is not None and len(db_df) > 0:
+                    print(f"[to_dataframe] DuckDB 加载 {len(db_df)} 条元数据")
+            except Exception as e:
+                print(f"[to_dataframe] DuckDB 加载失败: {e}")
+
+        if not excel_dfs and db_df is None:
+            # 回退到 JSON
+            if self.history:
+                try:
+                    return pd.DataFrame(self.history)
+                except Exception:
+                    pass
             return None
+
+        # 3. 合并：以 Excel 数据为基础，补充 DuckDB 元数据
+        result_dfs = []
+        excel_names = set()
+
+        if excel_dfs:
+            base_df = pd.concat(excel_dfs, ignore_index=True)
+            if '项目名称' in base_df.columns:
+                excel_names = set(base_df['项目名称'].tolist())
+
+            # 将 DuckDB 元数据合并到 Excel 行（按项目名称匹配）
+            if db_df is not None and '项目名称' in db_df.columns and '项目名称' in base_df.columns:
+                # 从 DuckDB 提取 build_year, decoration_standard, above_ground_floors
+                meta_cols = ['项目名称']
+                meta_map = {}
+                for _, row in db_df.iterrows():
+                    name = row.get('项目名称')
+                    if name:
+                        meta_map[name] = {
+                            '建造年份': row.get('建造年份'),
+                            '装修标准': row.get('装修标准'),
+                            '楼层数': row.get('楼层数'),
+                        }
+                # 更新 base_df 中的对应字段
+                for col in ['建造年份', '装修标准', '楼层数']:
+                    if col not in base_df.columns:
+                        base_df[col] = None
+                    for name, meta in meta_map.items():
+                        mask = base_df['项目名称'] == name
+                        if mask.any() and meta.get(col) is not None:
+                            base_df.loc[mask, col] = meta[col]
+
+            result_dfs.append(base_df)
+
+        # 4. 添加仅在 DuckDB 中、不在 Excel 中的项目
+        if db_df is not None and len(db_df) > 0:
+            db_only = db_df[~db_df['项目名称'].isin(excel_names)] if excel_names else db_df
+            if len(db_only) > 0:
+                result_dfs.append(db_only)
+                print(f"[to_dataframe] DuckDB 独有项目 {len(db_only)} 条")
+
+        if not result_dfs:
+            return None
+
         try:
-            return pd.DataFrame(self.history)
+            merged = pd.concat(result_dfs, ignore_index=True)
+            print(f"[to_dataframe] 合并后总计 {len(merged)} 条记录, {len(merged.columns)} 列")
+            return merged
         except Exception as e:
-            print(f"[to_dataframe] {e}")
+            print(f"[to_dataframe] 合并失败: {e}")
+            return result_dfs[0] if result_dfs else None
+
+    def _load_duckdb_dataframe(self) -> Optional[pd.DataFrame]:
+        """从 DuckDB 直接加载训练用 DataFrame（含完整字段映射）"""
+        if not HAS_DUCKDB or not os.path.exists(self.db_path):
             return None
+
+        conn = duckdb.connect(self.db_path, read_only=True)
+        try:
+            # 检查表是否存在
+            tables = conn.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
+            ).fetchall()
+            if 'project_meta' not in [t[0] for t in tables]:
+                return None
+
+            df = conn.execute("""
+                SELECT
+                    pm.name           AS 项目名称,
+                    pm.building_type  AS 建筑类型,
+                    pm.structure_type AS 结构类型,
+                    pm.total_area     AS 总建筑面积,
+                    pm.above_ground_floors AS 楼层数,
+                    pm.location       AS 所在地区,
+                    pm.build_year     AS 建造年份,
+                    pm.decoration_standard AS 装修标准,
+                    pm.total_cost     AS 项目总造价,
+                    pm.unit_price     AS 单方造价,
+                    pm.training_weight AS _sample_weight,
+                    pm.data_quality_grade AS source_type,
+                    CASE pm.data_quality_grade
+                        WHEN 'A' THEN 'high'
+                        WHEN 'B' THEN 'medium'
+                        ELSE 'low'
+                    END AS data_confidence
+                FROM project_meta pm
+                WHERE pm.building_type IS NOT NULL
+                  AND pm.unit_price IS NOT NULL
+                  AND pm.unit_price > 0
+            """).fetchdf()
+
+            # 将 above_ground_floors NULL 填充为 0
+            if '楼层数' in df.columns:
+                df['楼层数'] = df['楼层数'].fillna(0).astype(int)
+            if '建造年份' in df.columns:
+                df['建造年份'] = df['建造年份'].fillna(2023).astype(int)
+
+            # 为 DuckDB 行估算费用构成字段（DuckDB 无此数据，用规范比例估算）
+            # 这样 SVR 等使用全量特征的模型不会因全0而受负面影响
+            if '项目总造价' in df.columns and '人工费' not in df.columns:
+                tc = df['项目总造价'].fillna(0)
+                df['人工费'] = tc * 0.20
+                df['措施费'] = tc * 0.05
+                df['规费'] = tc * 0.05
+                df['税金'] = tc * 0.04
+                df['基础工程费'] = tc * 0.15
+                df['主体结构费'] = tc * 0.40
+                df['屋面工程费'] = tc * 0.05
+                df['外墙工程费'] = tc * 0.10
+                # 材料用量估算（按面积）
+                area = df['总建筑面积'].fillna(0)
+                df['混凝土总用量'] = area * 0.45
+                df['钢筋总用量'] = area * 0.055
+                df['砌块总用量'] = area * 0.25
+
+            return df
+        finally:
+            conn.close()
 
     def get_statistics(self) -> Dict:
         """获取训练数据集统计信息"""

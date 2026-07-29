@@ -8,7 +8,7 @@
 
 训练数据来源：Excel 导入的历史项目数据（data_loader.py）
 特征工程：建筑类型、结构类型、地区、装修标准 → one-hot 编码
-        总面积、楼层数 → 数值特征（建造年份已移除：全量数据恒为2023，零方差）
+        总面积、楼层数、建造年份 → 数值特征
 模型持久化：joblib 保存到 models_cache/ 目录
 """
 from __future__ import annotations
@@ -149,7 +149,7 @@ def pso_optimize_svr(
 # ===========================================
 CATEGORICAL_FEATURES = ["建筑类型", "结构类型", "所在地区", "装修标准"]
 NUMERIC_FEATURES = [
-    "总建筑面积", "楼层数",
+    "总建筑面积", "楼层数", "建造年份",  # restored: 价格归一化后安全
     # 费用构成特征
     "人工费", "措施费", "规费", "税金",
     # 分部工程特征
@@ -161,7 +161,7 @@ NUMERIC_FEATURES = [
 
 # 树模型专用：仅使用真正的输入特征（建造前已知参数）
 TREE_CATEGORICAL = ["建筑类型", "结构类型", "所在地区", "装修标准"]
-TREE_NUMERIC = ["总建筑面积", "楼层数"]
+TREE_NUMERIC = ["总建筑面积", "楼层数", "建造年份"]
 
 
 def build_feature_preprocessor() -> ColumnTransformer:
@@ -467,6 +467,7 @@ class RealTrainedModel:
             "装修标准": project.get("decoration_level", "普通装修"),
             "总建筑面积": float(project.get("total_area", 10000)),
             "楼层数": int(project.get("floors", 6)),
+            "建造年份": int(project.get("build_year", project.get("year", 2023))),
         }])
         if use_tree:
             X = extract_tree_features(sample)
@@ -521,6 +522,7 @@ class TotalCostSVRModel(RealTrainedModel):
             "装修标准": project.get("decoration_level", "普通装修"),
             "总建筑面积": float(project.get("total_area", 10000)),
             "楼层数": int(project.get("floors", 6)),
+            "建造年份": int(project.get("build_year", project.get("year", 2023))),
         }])
         X = extract_features(sample)
         log_y_pred = float(self.pipeline.predict(X)[0])
@@ -713,8 +715,8 @@ class UnitCostGBTModel(RealTrainedModel):
 
     def _build_estimator(self):
         return GradientBoostingRegressor(
-            n_estimators=50, max_depth=2, learning_rate=0.05,
-            min_samples_leaf=10, subsample=0.8, random_state=42
+            n_estimators=100, max_depth=4, learning_rate=0.05,
+            min_samples_leaf=5, subsample=0.8, random_state=42
         )
 
 
@@ -733,11 +735,11 @@ class SectionXGBModel(RealTrainedModel):
 
     def _build_estimator(self):
         if HAS_XGB:
-            return XGBRegressor(n_estimators=50, max_depth=2, learning_rate=0.05,
-                                reg_alpha=5.0, reg_lambda=5.0, subsample=0.8,
-                                colsample_bytree=0.8, min_samples_leaf=10, random_state=42)
-        return GradientBoostingRegressor(n_estimators=50, max_depth=2, learning_rate=0.05,
-                                         min_samples_leaf=10, subsample=0.8, random_state=42)
+            return XGBRegressor(n_estimators=100, max_depth=4, learning_rate=0.05,
+                                reg_alpha=1.0, reg_lambda=1.0, subsample=0.8,
+                                colsample_bytree=0.8, min_samples_leaf=5, random_state=42)
+        return GradientBoostingRegressor(n_estimators=100, max_depth=4, learning_rate=0.05,
+                                         min_samples_leaf=5, subsample=0.8, random_state=42)
 
 
 class SubsectionXGBModel(RealTrainedModel):
@@ -755,11 +757,11 @@ class SubsectionXGBModel(RealTrainedModel):
 
     def _build_estimator(self):
         if HAS_XGB:
-            return XGBRegressor(n_estimators=50, max_depth=2, learning_rate=0.05,
-                                reg_alpha=5.0, reg_lambda=5.0, subsample=0.8,
-                                colsample_bytree=0.8, min_samples_leaf=10, random_state=42)
-        return GradientBoostingRegressor(n_estimators=50, max_depth=2, learning_rate=0.05,
-                                         min_samples_leaf=10, subsample=0.8, random_state=42)
+            return XGBRegressor(n_estimators=100, max_depth=4, learning_rate=0.05,
+                                reg_alpha=1.0, reg_lambda=1.0, subsample=0.8,
+                                colsample_bytree=0.8, min_samples_leaf=5, random_state=42)
+        return GradientBoostingRegressor(n_estimators=100, max_depth=4, learning_rate=0.05,
+                                         min_samples_leaf=5, subsample=0.8, random_state=42)
 
 
 class ItemXGBModel(RealTrainedModel):
@@ -777,11 +779,11 @@ class ItemXGBModel(RealTrainedModel):
 
     def _build_estimator(self):
         if HAS_XGB:
-            return XGBRegressor(n_estimators=50, max_depth=2, learning_rate=0.05,
-                                reg_alpha=5.0, reg_lambda=5.0, subsample=0.8,
-                                colsample_bytree=0.8, min_samples_leaf=10, random_state=42)
-        return GradientBoostingRegressor(n_estimators=50, max_depth=2, learning_rate=0.05,
-                                         min_samples_leaf=10, subsample=0.8, random_state=42)
+            return XGBRegressor(n_estimators=100, max_depth=4, learning_rate=0.05,
+                                reg_alpha=1.0, reg_lambda=1.0, subsample=0.8,
+                                colsample_bytree=0.8, min_samples_leaf=5, random_state=42)
+        return GradientBoostingRegressor(n_estimators=100, max_depth=4, learning_rate=0.05,
+                                         min_samples_leaf=5, subsample=0.8, random_state=42)
 
 
 class IndicatorRFModel(RealTrainedModel):
@@ -798,8 +800,8 @@ class IndicatorRFModel(RealTrainedModel):
         ))
 
     def _build_estimator(self):
-        return RandomForestRegressor(n_estimators=50, max_depth=2,
-                                     min_samples_leaf=10, min_samples_split=20,
+        return RandomForestRegressor(n_estimators=150, max_depth=6,
+                                     min_samples_leaf=5, min_samples_split=10,
                                      random_state=42)
 
 

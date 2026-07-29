@@ -86,6 +86,19 @@ REACT_SYSTEM_PROMPT = """你是「北辰造价助手」——专业的建筑工�
 - 简洁专业，避免冗余
 - 涉及造价数字时，给出区间或精度说明
 - 使用规范的建筑造价术语（参考五算：估算/概算/预算/结算/决算）
+
+## 反馈与追问处理
+当用户对预测结果提出质疑或补充信息时：
+- 认真分析用户的具体关切（价格高低、地区差异、数据准确性等）
+- 用专业知识解释影响造价的关键因素
+- 如训练数据不足，用行业经验提供参考信息并明确标注
+- 不要简单重复功能列表，要直接回应用户的问题
+
+## 上下文理解规则
+- 当用户在预测后追问具体地区（如“成都高新区呢”），应理解为要求基于该地区重新分析
+- 当用户说“XX呢”、“XX怎么样”，应理解为对前文话题的延伸追问
+- 不要返回通用菜单，要直接理解用户的具体意图并回应
+- 利用对话历史中的项目参数，结合用户新提供的信息进行回答
 """
 
 
@@ -132,26 +145,89 @@ class MockLLM:
             return "thanks"
         if any(kw in text for kw in ["能做什么", "功能", "帮助", "怎么用", "你会什么", "你的功能"]):
             return "help"
-        # 10. general (兜底)
+        # 10. implicit predict (描述了具体建筑项目参数，隐含预测意图)
+        # 当用户提到建筑面积、楼层数等具体参数时，通常是想要造价预测
+        has_area = bool(re.search(r"\d+(?:\.\d+)?\s*(?:平米|平方米|㎡|m[²32]|万平)", text))
+        has_building_action = any(kw in text for kw in ["修一", "建一", "盖一", "修建", "建造", "建设", "拟建", "计划建"])
+        if has_area and has_building_action:
+            return "predict"
+        # 11. region_refine - user specifies a more precise location (MUST be before feedback, because feedback contains '如何')
+        if any(kw in text for kw in ["高新区", "新区", "开发区", "科技园", "工业园", "经开区", "自贸区", "CBD", "中心区"]) or \
+           (any(kw in text for kw in ["呢", "的话", "怎么样", "如何"]) and any(city in text for city in ["成都", "北京", "上海", "广州", "深圳", "杭州", "武汉", "重庆", "西安", "南京", "天津", "苏州", "长沙"])):
+            return "region_refine"
+        # 12. feedback/questioning intent - user questions the prediction result
+        if any(kw in text for kw in ["太便宜", "太贵", "偏高", "偏低", "不合理", "准确吗", "对吗", "是不是", "会不会", "考虑", "地区", "差异", "影响", "为什么", "怎么", "如何"]):
+            return "feedback"
+        # 13. supplementary info intent - user adds/corrects project details
+        if any(kw in text for kw in ["补充", "另外", "还有", "修改", "改为", "改成", "不对", "错了", "应该是"]):
+            return "supplement"
+        # 14. repredict - user wants to adjust parameters and re-predict
+        if any(kw in text for kw in ["重新预测", "重新算", "再算", "换成", "改为", "改成", "调整"]):
+            return "repredict"
+        # 15. compare - comparison request
+        if any(kw in text for kw in ["对比", "比较", "差别", "区别"]) or re.search(r"vs|和.{1,6}比", text):
+            return "compare"
+        # 16. Parameter adjustment: "如果是X呢", "改为X", "变成X", "X层", "X平米"
+        if any(kw in text for kw in ["如果是", "改为", "变成", "换成", "改成"]):
+            return "repredict"
+        # Number + unit pattern indicating parameter change
+        if re.search(r'\d+\s*(层|楼|平米|m[²2]|平方米)', text) and len(text) < 30:
+            return "repredict"
+        # 17. Data availability query: "有...数据吗", "有没有", "数据够吗", "样本"
+        if any(kw in text for kw in ["有没有", "数据够", "样本", "训练数据", "涵盖", "包含"]):
+            return "data_query"
+        if any(kw in text for kw in ["数据", "样本", "训练"]) and any(kw in text for kw in ["吗", "呢", "有没有", "是否"]):
+            return "data_query"
+        # 18. general (兜底)
+        if any(kw in text for kw in ["高新区", "新区", "开发区", "科技园", "工业园", "经开区", "自贸区", "CBD", "中心区"]):
+            return "region_refine"
+        if len(text) < 20 and any(kw in text for kw in ["呢", "怎么样"]) and any(c in text for c in ["成都", "北京", "上海", "广州", "深圳", "杭州", "武汉", "重庆", "天府", "锦江", "青羊", "武侯", "新都"]):
+            return "region_refine"
+        if any(kw in text for kw in ["重新预测", "重新算", "再算"]):
+            return "repredict"
+        if any(kw in text for kw in ["对比", "比较", "差别"]):
+            return "compare"
         return "general"
+
+    # 建筑类型同义词映射：用户输入关键词 -> 训练数据中的标准类型
+    BUILDING_TYPE_MAP = {
+        '住宅': ['住宅', '安置', '小区', '住房', '公寓', '别墅'],
+        '学校': ['学校', '学院', '教育', '教学', '校区', '幼儿园'],
+        '医院': ['医院', '卫生', '医疗', '诊所'],
+        '办公楼': ['办公', '写字楼', '行政', '商务楼'],
+        '商业建筑': ['商业', '商铺', '商场', '酒店', '宾馆', '饭店', '旅馆', '度假', '餐饮'],
+        '工业建筑': ['厂房', '工业', '车间', '仓库'],
+        '基础设施': ['道路', '桥梁', '管网', '市政', '隧道'],
+        '公共建筑': ['文化', '图书', '展览', '体育', '综合', '服务', '活动'],
+    }
+
+    @classmethod
+    def normalize_building_type(cls, raw_type: str) -> str:
+        """将用户输入的建筑类型关键词映射为标准训练数据类型"""
+        if not raw_type:
+            return raw_type
+        for standard_type, keywords in cls.BUILDING_TYPE_MAP.items():
+            for kw in keywords:
+                if kw in raw_type:
+                    return standard_type
+        return raw_type
 
     def extract_params(self, text: str) -> Dict:
         params = {}
-        # 面积
-        m = re.search(r"(\d+(?:\.\d+)?)\s*(?:万\s*)?(?:平米|平|m²|平方米)", text)
+        # 面积 —— 支持 m², m2, m3, 平米, 平方米, ㎡, 平 等多种写法
+        m = re.search(r"(\d+(?:\.\d+)?)\s*(?:万\s*)?(?:平方米|平米|㎡|m[²32]|平)", text)
         if m:
             v = float(m.group(1))
-            if "万" in text[m.start():m.end()+5]:
+            # 检查匹配范围内是否包含"万"字
+            matched_text = text[m.start():m.end()]
+            if "万" in matched_text:
                 v *= 10000
             params["total_area"] = v
 
-        # 建筑类型
-        types_map = {"学校": "学校", "医院": "医院", "办公楼": "办公楼", "写字楼": "办公楼",
-                     "住宅": "住宅", "厂房": "工业建筑", "工业": "工业建筑",
-                     "商业": "商业建筑", "商场": "商业建筑", "公共": "公共建筑"}
-        for kw, v in types_map.items():
-            if kw in text:
-                params["project_type"] = v
+        # 建筑类型（使用 BUILDING_TYPE_MAP 进行同义词映射）
+        for standard_type, keywords in self.BUILDING_TYPE_MAP.items():
+            if any(kw in text for kw in keywords):
+                params["project_type"] = standard_type
                 break
 
         # 地区
@@ -178,14 +254,16 @@ class MockLLM:
                 params["decoration_level"] = "简单装修" if d == "毛坯" else d
                 break
 
-        params.setdefault("project_type", "学校")
+        params.setdefault("project_type", "住宅")
         params.setdefault("structure_type", "框架结构")
         params.setdefault("location", "华东")
         params.setdefault("floors", 6)
         params.setdefault("build_year", 2026)
         params.setdefault("decoration_level", "普通装修")
         params.setdefault("project_name", "对话生成项目")
-        params.setdefault("total_area", 10000)
+        # 注意：面积不设默认值，若用户未提供则在 predict_cost 中再回退
+        if "total_area" not in params:
+            params["total_area"] = 10000
         return params
 
     def think(self, text: str) -> str:
@@ -255,6 +333,8 @@ class CostAgentManager:
                 decoration_level: 装修标准（简单装修/普通装修/精装修/豪华装修）
             """
             from ml_models import predict_with_real_models
+            # 标准化建筑类型（如 酒店 -> 商业建筑）
+            project_type = MockLLM.normalize_building_type(project_type)
             project = {
                 "project_name": project_name, "project_type": project_type,
                 "structure_type": structure_type, "total_area": total_area,
@@ -303,6 +383,8 @@ class CostAgentManager:
                 structure_type: 结构类型
                 area: 总面积（平方米）
             """
+            # 标准化建筑类型
+            project_type = MockLLM.normalize_building_type(project_type)
             similar = data_loader.find_similar_projects(project_type, structure_type, area)
             return ToolResponse(output=[{"type": "text", "text": json.dumps(similar, ensure_ascii=False, default=str)}])
 
@@ -395,7 +477,7 @@ class CostAgentManager:
 
     def get_or_build_agent(self, session_id: str):
         """获取或构建智能体（真实优先，回退 Mock）"""
-        if session_id not in self._real_agents:
+        if session_id not in self._real_agents or self._real_agents[session_id] is None:
             agent = self._build_real_agent()
             self._real_agents[session_id] = agent  # None 表示用 Mock
         return self._real_agents[session_id]
@@ -410,52 +492,61 @@ class CostAgentManager:
             history = []
 
         real_agent = self.get_or_build_agent(session_id)
+        print(f"[chat] session={session_id}, real_agent={'AgentScope' if real_agent is not None else 'None→MockLLM'}, msg_len={len(user_message)}")
         if real_agent is not None:
             return await self._chat_with_real_agent(real_agent, user_message, history, session_id)
         else:
             return await self._chat_with_mock(user_message, history, session_id)
 
     async def _chat_with_real_agent(self, agent, user_message: str, history: List[Dict], session_id: str) -> Dict:
-        """使用真实 AgentScope Agent"""
-        try:
-            # 构造 Msg（content 必须是 block 列表）
-            msg = Msg(
-                name="user",
-                content=[TextBlock(type="text", text=user_message)],
-                role="user",
-            )
-            response = await agent.reply(msg)
+        """使用真实 AgentScope Agent（含重试）"""
+        max_retries = 2
+        for attempt in range(max_retries):
+            try:
+                # 构造 Msg（content 必须是 block 列表）
+                msg = Msg(
+                    name="user",
+                    content=[TextBlock(type="text", text=user_message)],
+                    role="user",
+                )
+                response = await agent.reply(msg)
 
-            # 提取回复文本
-            reply_text = ""
-            if hasattr(response, "content") and isinstance(response.content, list):
-                for block in response.content:
-                    if isinstance(block, dict) and block.get("type") == "text":
-                        reply_text += block.get("text", "")
-                    elif hasattr(block, "text"):
-                        reply_text += block.text
-            elif isinstance(response, str):
-                reply_text = response
+                # 提取回复文本
+                reply_text = ""
+                if hasattr(response, "content") and isinstance(response.content, list):
+                    for block in response.content:
+                        if isinstance(block, dict) and block.get("type") == "text":
+                            reply_text += block.get("text", "")
+                        elif hasattr(block, "text"):
+                            reply_text += block.text
+                elif isinstance(response, str):
+                    reply_text = response
 
-            # Fallback to MockLLM if AgentScope returns timeout/waiting message
-            if not reply_text or "waiting for your permission" in reply_text.lower() or "external execution" in reply_text.lower():
+                # Fallback to MockLLM if AgentScope returns timeout/waiting message
+                # Only fallback for short replies containing error indicators, not just mentions
+                print(f"[real agent] reply_len={len(reply_text)}, attempt={attempt}, session={session_id}")
+                if not reply_text or (len(reply_text) < 100 and ("waiting for your permission" in reply_text.lower() or "external execution" in reply_text.lower())):
+                    print(f"[real agent] falling back to MockLLM (reply empty or short+error-like)")
+                    return await self._chat_with_mock(user_message, history, session_id)
+
+                return {
+                    "session_id": session_id,
+                    "reply": reply_text or "(空回复)",
+                    "react_steps": [
+                        {"step": "thought", "content": "调用真实 AgentScope ReActAgent 推理"},
+                        {"step": "final_answer", "content": reply_text[:200]},
+                    ],
+                    "tool_result": None,
+                    "backend": "agentscope_sdk",
+                    "history_count": len(history) + 2,
+                }
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    print(f"[real agent] attempt {attempt+1} failed: {e}, retrying...")
+                    await asyncio.sleep(1)
+                    continue
+                print(f"[real agent] all {max_retries} attempts failed: {e}, falling back to MockLLM")
                 return await self._chat_with_mock(user_message, history, session_id)
-
-            return {
-                "session_id": session_id,
-                "reply": reply_text or "(空回复)",
-                "react_steps": [
-                    {"step": "thought", "content": "调用真实 AgentScope ReActAgent 推理"},
-                    {"step": "final_answer", "content": reply_text[:200]},
-                ],
-                "tool_result": None,
-                "backend": "agentscope_sdk",
-                "history_count": len(history) + 2,
-            }
-        except Exception as e:
-            print(f"[real agent chat error] {e}")
-            # 回退到 Mock
-            return await self._chat_with_mock(user_message, history, session_id)
 
     async def _chat_with_mock(self, user_message: str, history: List[Dict], session_id: str) -> Dict:
         """使用 MockLLM 推理（无 API key 时）"""
@@ -492,14 +583,17 @@ class CostAgentManager:
             else:
                 selected = ["total_pso_svr", "section_xgb", "indicator_rf"]
                 backend_note = "未训练（仅占位）"
+            # 确保建筑类型已标准化（如 酒店 -> 商业建筑）
+            if params.get("project_type"):
+                params["project_type"] = MockLLM.normalize_building_type(params["project_type"])
             prediction = predict_with_real_models(self.model_factory, params, selected, data_loader=self.data_loader)
             tool_result = prediction
             final_answer = self._format_prediction(prediction, backend_note)
             if sufficiency_warning:
                 final_answer += sufficiency_warning
             # Check if user provided key parameters
-            _has_type = any(kw in user_message for kw in ["住宅", "学校", "医院", "办公楼", "商业", "工业", "公共", "基础设施"])
-            _has_area = any(kw in user_message for kw in ["平米", "平", "m²", "平方米", "万平"])
+            _has_type = any(kw in user_message for kw in ["住宅", "学校", "医院", "办公楼", "商业", "工业", "公共", "基础设施", "酒店", "宾馆", "商场", "商铺", "厂房", "公寓", "别墅"]) 
+            _has_area = any(kw in user_message for kw in ["平米", "平方米", "m²", "m2", "m3", "㎡", "万平"])
             _has_location = any(kw in user_message for kw in ["华北", "华东", "华南", "华中", "西南", "西北", "东北", "北京", "上海", "广州", "深圳", "成都", "杭州", "南京", "武汉"])
             if not (_has_type and _has_area and _has_location):
                 final_answer += "\n\n💡 为更精准预测，建议补充：建筑类型、总建筑面积、所在地区等参数"
@@ -541,8 +635,10 @@ class CostAgentManager:
             tool_result = {"models": models}
 
         elif intent == "find_similar":
+            raw_type = params.get("project_type", "")
+            normalized_type = MockLLM.normalize_building_type(raw_type)
             similar = self.data_loader.find_similar_projects(
-                params.get("project_type", ""),
+                normalized_type,
                 params.get("structure_type", ""),
                 params.get("total_area", 0),
             )
@@ -603,15 +699,27 @@ class CostAgentManager:
             checker = DataSufficiencyChecker()
             df = self.data_loader.to_dataframe()
 
+            # Comprehensive typical ranges for ALL building types
+            typical_ranges = {
+                '医院': (3500, 8000, "医院项目因功能复杂、设备要求高，单方造价通常在3500-8000元/m²"),
+                '学校': (2500, 5000, "学校项目因结构相对简单，单方造价通常在2500-5000元/m²"),
+                '办公楼': (3000, 7000, "办公楼项目因装修标准和设备配置差异大，单方造价通常在3000-7000元/m²"),
+                '商业': (3000, 8000, "商业项目因功能和地段差异，单方造价通常在3000-8000元/m²"),
+                '住宅': (2000, 5000, "住宅项目因结构类型和装修标准差异，单方造价通常在2000-5000元/m²"),
+                '工业': (1500, 4000, "工业建筑因用途和跨度不同，单方造价通常在1500-4000元/m²"),
+                '基础设施': (1000, 5000, "基础设施项目因类型差异大（道路/桥梁/管网等），造价区间较宽"),
+                '公共': (2500, 6000, "公共建筑因功能多样，单方造价通常在2500-6000元/m²"),
+            }
+
             # Check if the queried type exists in training data
-            has_type = False
+            found_type = False
             if df is not None and '建筑类型' in df.columns:
                 # Try to detect which type user is asking about
                 for bt in ['医院', '学校', '办公楼', '商业', '工业', '住宅', '基础设施', '公共']:
                     if bt in user_message:
+                        found_type = True
                         matching = df[df['建筑类型'].str.contains(bt, na=False)]
                         if len(matching) > 0:
-                            has_type = True
                             prices = pd.to_numeric(matching['单方造价'], errors='coerce')
                             final_answer = f"## 当前数据中有{bt}类型项目\n\n"
                             final_answer += f"- 样本数: {len(matching)}个\n"
@@ -620,13 +728,6 @@ class CostAgentManager:
                         else:
                             final_answer = f"## 当前数据中缺少{bt}类型项目\n\n"
                             final_answer += "> 以下为本模型基于行业经验提供的参考信息，非基于本地训练数据\n\n"
-                            # Provide typical ranges based on general knowledge
-                            typical_ranges = {
-                                '医院': (3500, 8000, "医院项目因功能复杂、设备要求高，单方造价通常在3500-8000元/m²"),
-                                '学校': (2500, 5000, "学校项目因结构相对简单，单方造价通常在2500-5000元/m²"),
-                                '办公楼': (3000, 7000, "办公楼项目因装修标准和设备配置差异大，单方造价通常在3000-7000元/m²"),
-                                '商业': (3000, 8000, "商业项目因功能和地段差异，单方造价通常在3000-8000元/m²"),
-                            }
                             if bt in typical_ranges:
                                 low, high, desc = typical_ranges[bt]
                                 final_answer += f"**{bt}项目典型单方造价**: {low} ~ {high} 元/m²\n\n"
@@ -636,8 +737,224 @@ class CostAgentManager:
                             final_answer += "可参考来源：各省建设工程造价管理总站发布的造价指标。\n"
                         break
 
-            if not has_type and 'final_answer' not in dir():
-                final_answer = "请告诉我您想了解哪种建筑类型的造价信息？（住宅/学校/医院/办公楼/商业建筑/工业建筑/基础设施/公共建筑）"
+            if not found_type:
+                # No specific building type detected — provide general overview
+                final_answer = "## 各类建筑典型单方造价参考\n\n"
+                final_answer += "> 以下为本模型基于行业经验提供的参考信息，非基于本地训练数据\n\n"
+                for bt, (low, high, desc) in typical_ranges.items():
+                    final_answer += f"- **{bt}**: {low} ~ {high} 元/m²\n"
+                final_answer += "\n请问您想了解哪种建筑类型的详细造价信息？"
+                final_answer += "（住宅/学校/医院/办公楼/商业建筑/工业建筑/基础设施/公共建筑）"
+
+        elif intent == "feedback":
+            response_parts = []
+            if any(kw in user_message for kw in ["太便宜", "偏低", "便宜"]):
+                response_parts.append("## 关于造价偏低的分析\n\n")
+                response_parts.append("您提出的质疑很有价值。单方造价受以下因素影响：\n\n")
+                response_parts.append("### 地区差异\n")
+                response_parts.append("- 不同地区的材料价格、人工成本、运输费用差异显著\n")
+                response_parts.append("- 成都地区作为西南地区核心城市，造价水平处于中等偏上\n")
+                response_parts.append("- 一线城市（北京/上海/深圳）通常比成都高15-30%\n")
+                response_parts.append("- 三四线城市通常比成都低10-20%\n\n")
+                response_parts.append("### 项目规模影响\n")
+                response_parts.append("- 小型项目（<10000m²）因固定成本分摊，单方造价通常更高\n")
+                response_parts.append("- 大型项目可享受规模经济效应\n\n")
+                response_parts.append("### 建议\n")
+                response_parts.append("- 如需更精准预测，请提供具体地区（如成都高新区 vs 成都郊县）\n")
+                response_parts.append("- 可参考当地建设工程造价管理总站发布的最新造价指标\n")
+                response_parts.append("- 建议补充同地区同类项目的真实数据以提高预测准确性\n")
+            elif any(kw in user_message for kw in ["地区", "区域", "地方", "城市"]):
+                response_parts.append("## 地区差异对造价的影响\n\n")
+                response_parts.append("地区是影响工程造价的关键因素之一：\n\n")
+                response_parts.append("| 地区 | 相对造价指数 | 说明 |\n")
+                response_parts.append("|------|------------|------|\n")
+                response_parts.append("| 一线城市（北上广深） | 1.15~1.30 | 人工/材料/运输成本最高 |\n")
+                response_parts.append("| 新一线城市（成都/杭州/武汉等） | 1.00~1.10 | 基准水平 |\n")
+                response_parts.append("| 二三线城市 | 0.85~1.00 | 成本相对较低 |\n")
+                response_parts.append("| 县城/乡镇 | 0.75~0.90 | 最低但运输成本可能增加 |\n\n")
+                response_parts.append("> 以上为行业经验参考值，实际造价需结合具体项目条件。\n")
+            final_answer = "".join(response_parts) if response_parts else "感谢您的反馈。请问您具体关注哪方面的信息？我可以提供更详细的分析。"
+
+        elif intent == "supplement":
+            response_parts = []
+            response_parts.append("收到您的补充信息。让我重新分析：\n\n")
+            new_params = self.mock_llm.extract_params(user_message)
+            if new_params.get('total_area'):
+                response_parts.append(f"- 建筑面积更新为：{new_params['total_area']} m²\n")
+            if new_params.get('project_type'):
+                response_parts.append(f"- 建筑类型：{new_params['project_type']}\n")
+            if new_params.get('location'):
+                response_parts.append(f"- 所在地区：{new_params['location']}\n")
+            response_parts.append("\n请告诉我完整的预测需求，我将基于最新信息重新预测。")
+            final_answer = "".join(response_parts)
+
+        elif intent == "region_refine":
+            # Extract the region from user's message
+            region = None
+            for kw in ["高新区", "新区", "开发区", "科技园", "工业园", "经开区", "自贸区", "CBD", "中心区"]:
+                if kw in user_message:
+                    for city in ["成都", "北京", "上海", "广州", "深圳", "杭州", "武汉", "重庆", "西安", "南京", "天津", "苏州", "长沙"]:
+                        if city in user_message:
+                            region = f"{city}{kw}"
+                            break
+                    if not region:
+                        region = kw
+                    break
+            if not region:
+                match = re.search(r'([\u4e00-\u9fa5]{2,4}(?:高新区|新区|开发区|科技园|工业园|经开区))', user_message)
+                if match:
+                    region = match.group(1)
+            if not region:
+                # Try to find any city mentioned
+                for city in ["成都", "北京", "上海", "广州", "深圳", "杭州", "武汉", "重庆", "西安", "南京", "天津", "苏州", "长沙"]:
+                    if city in user_message:
+                        region = city
+                        break
+
+            if region:
+                final_answer = f"## {region}地区造价分析\n\n"
+                final_answer += f"针对您提到的**{region}**地区，以下是专业分析：\n\n"
+                final_answer += "### 地区造价特点\n"
+                if "高新" in region:
+                    final_answer += "- 高新区通常基础设施完善，施工条件较好\n"
+                    final_answer += "- 但土地成本和人工成本可能略高于普通城区\n"
+                    final_answer += "- 建筑材料运输便利，物流成本较低\n"
+                    final_answer += "- 综合造价指数通常比所在城市平均水平高 **5-15%**\n\n"
+                elif "新区" in region:
+                    final_answer += "- 新区建设标准通常较高\n"
+                    final_answer += "- 可能存在基础设施配套不完善的额外成本\n"
+                    final_answer += "- 综合造价指数与所在城市平均水平基本持平\n\n"
+                elif "CBD" in region or "中心" in region:
+                    final_answer += "- 核心区域施工场地受限，运输组织成本高\n"
+                    final_answer += "- 人工成本、材料运输成本均高于外围区域\n"
+                    final_answer += "- 综合造价指数通常比所在城市平均水平高 **10-20%**\n\n"
+                else:
+                    final_answer += f"- {region}作为特定功能区域，有其独特的造价特征\n"
+                    final_answer += "- 需结合当地材料价格、人工成本、运输条件综合分析\n"
+                    final_answer += "- 综合造价指数通常比所在城市平均水平高 **5-15%**\n\n"
+                final_answer += "### 建议\n"
+                final_answer += f"- 如需精准预测{region}项目，建议补充该地区同类项目的真实数据\n"
+                final_answer += "- 可参考当地建设工程造价管理总站发布的分区造价指标\n"
+                final_answer += "- 不同区域的材料价格、人工成本差异可达10-20%\n"
+            else:
+                final_answer = "请告诉我您具体想了解哪个地区的造价情况？例如：成都高新区、北京朝阳区等。"
+
+        elif intent == "repredict":
+            new_params = self.mock_llm.extract_params(user_message)
+            
+            # Check for specific parameter changes
+            changes = []
+            if new_params.get('total_area'):
+                changes.append(f"面积: {new_params['total_area']} m²")
+            if new_params.get('floors'):
+                changes.append(f"楼层: {new_params['floors']} 层")
+            if new_params.get('project_type'):
+                changes.append(f"类型: {new_params['project_type']}")
+            if new_params.get('region'):
+                changes.append(f"地区: {new_params['region']}")
+            
+            if changes:
+                final_answer = "## 参数调整分析\n\n"
+                final_answer += "基于您的调整：\n\n"
+                for c in changes:
+                    final_answer += f"- {c}\n"
+                final_answer += "\n"
+                
+                # Provide analysis based on the change
+                if new_params.get('floors'):
+                    floors = new_params['floors']
+                    final_answer += f"### {floors}层建筑造价分析\n\n"
+                    if floors <= 6:
+                        final_answer += "- 多层建筑，通常采用砖混或框架结构\n"
+                        final_answer += "- 单方造价相对较低，约 2000-4000 元/m²\n"
+                        final_answer += "- 无需电梯，公摊面积小\n"
+                    elif floors <= 18:
+                        final_answer += "- 小高层建筑，通常采用框架或框剪结构\n"
+                        final_answer += "- 单方造价中等，约 3000-5000 元/m²\n"
+                        final_answer += "- 需配置电梯，基础要求较高\n"
+                    else:
+                        final_answer += "- 高层建筑，通常采用框剪或剪力墙结构\n"
+                        final_answer += "- 单方造价较高，约 4000-7000 元/m²\n"
+                        final_answer += "- 基础工程量大，结构要求严格\n"
+                    final_answer += f"\n> 以上为行业经验参考，实际造价需结合具体项目条件。\n"
+                else:
+                    final_answer += "请提供完整项目参数，我将重新预测。"
+            else:
+                final_answer = "请告诉我具体要调整哪个参数？例如：改为20层、面积5000m²等。"
+
+        elif intent == "compare":
+            # Try to detect what's being compared
+            final_answer = "## 造价对比分析\n\n"
+            
+            # Check if comparing building types
+            if any(kw in user_message for kw in ["住宅", "酒店", "学校", "医院", "办公", "商业"]):
+                final_answer += "### 不同建筑类型单方造价参考\n\n"
+                final_answer += "| 类型 | 典型范围(元/m²) | 说明 |\n"
+                final_answer += "|------|----------------|------|\n"
+                final_answer += "| 住宅 | 2000-4500 | 结构相对简单 |\n"
+                final_answer += "| 商业/酒店 | 3000-8000 | 装修和设备要求高 |\n"
+                final_answer += "| 办公楼 | 3000-7000 | 机电系统复杂 |\n"
+                final_answer += "| 学校 | 2500-5000 | 功能相对标准化 |\n"
+                final_answer += "| 医院 | 3500-8000 | 专业设备要求高 |\n\n"
+                final_answer += "> 酒店通常比住宅高 **30-80%**，主要差异在装修标准、机电系统和消防设施。\n"
+            else:
+                final_answer += "| 对比维度 | 造价差异 |\n|------|------|\n"
+                final_answer += "| 一线 vs 新一线 | +15~30% |\n"
+                final_answer += "| 核心区 vs 郊区 | +5~15% |\n"
+                final_answer += "| 高层 vs 多层 | +20~40% |\n"
+            
+            final_answer += "\n请说明具体对比条件，我可以提供更精准的分析。"
+
+        elif intent == "data_query":
+            checker = DataSufficiencyChecker()
+            df = self.data_loader.to_dataframe()
+            
+            if df is not None and len(df) > 0:
+                # Check what types exist
+                types = df['建筑类型'].value_counts().to_dict() if '建筑类型' in df.columns else {}
+                
+                # Try to detect what type user is asking about
+                asked_type = None
+                for bt in ['酒店', '宾馆', '住宅', '学校', '医院', '办公楼', '商业', '工业', '基础设施', '公共']:
+                    if bt in user_message:
+                        asked_type = bt
+                        break
+                
+                final_answer = "## 训练数据情况\n\n"
+                final_answer += f"当前训练集共 **{len(df)}** 条项目数据：\n\n"
+                
+                if asked_type:
+                    # Map to training data type
+                    type_map = {'酒店': '商业建筑', '宾馆': '商业建筑', '饭店': '商业建筑'}
+                    mapped_type = type_map.get(asked_type, asked_type)
+                    count = types.get(mapped_type, 0)
+                    
+                    if count > 0:
+                        final_answer += f"### {asked_type}（{mapped_type}）\n\n"
+                        final_answer += f"✅ 当前数据中有 **{count}** 个{mapped_type}类型项目\n\n"
+                        subset = df[df['建筑类型'] == mapped_type]
+                        prices = pd.to_numeric(subset['单方造价'], errors='coerce')
+                        final_answer += f"- 单方造价范围：{prices.min():.0f} ~ {prices.max():.0f} 元/m²\n"
+                        final_answer += f"- 平均单方造价：{prices.mean():.0f} 元/m²\n"
+                    else:
+                        final_answer += f"### {asked_type}项目\n\n"
+                        final_answer += f"⚠️ 当前训练数据中**没有**{asked_type}类型项目\n\n"
+                        final_answer += f"> 以下为基于行业经验的参考信息，非基于本地训练数据\n\n"
+                        # Provide knowledge-based info
+                        if asked_type in ['酒店', '宾馆']:
+                            final_answer += "**酒店项目典型单方造价**: 3000 ~ 8000 元/m²\n\n"
+                            final_answer += "- 经济型酒店：3000-4500 元/m²\n"
+                            final_answer += "- 中档酒店：4500-6000 元/m²\n"
+                            final_answer += "- 高档/度假酒店：6000-8000+ 元/m²\n\n"
+                            final_answer += "酒店造价受星级标准、装修档次、配套设施影响显著。\n"
+                        final_answer += f"\n**建议**: 补充{asked_type}类型真实项目数据以提高预测准确性。\n"
+                
+                if not asked_type:
+                    final_answer += "### 各类型分布\n\n"
+                    for bt, count in sorted(types.items(), key=lambda x: -x[1]):
+                        final_answer += f"- {bt}: {count}个\n"
+            else:
+                final_answer = "当前暂无训练数据。请先导入Excel项目数据。"
 
         else:
             if intent == "greeting":
@@ -664,16 +981,32 @@ class CostAgentManager:
                                 "5. **相似项目** — 查找历史相似项目\n"
                                 "   例：「找类似的住宅项目」")
             else:
-                final_answer = (f"我理解了您的输入：「{user_message}」\n\n"
-                                "作为造价助手，我可以帮您完成以下操作：\n"
-                                "1. **造价预测** — 告诉我项目类型、面积、地区等信息\n"
-                                "2. **模型训练** — 用历史数据训练预测模型\n"
-                                "3. **术语解释** — 解答建筑造价专业术语\n"
-                                "4. **相似项目检索** — 查找历史相似项目\n\n"
-                                "请问您具体想了解或预测什么？我可以更精准地帮助您。")
+                # Context-aware general handler
+                location_keywords = ["区", "市", "省", "县", "镇", "街道", "高新区", "新区", "开发区"]
+                has_location = any(kw in user_message for kw in location_keywords)
+                if has_location:
+                    final_answer = "我注意到您提到了地区信息。请问您是想：\n\n"
+                    final_answer += "1. **了解该地区的造价水平** — 我可以提供地区差异分析\n"
+                    final_answer += "2. **基于该地区重新预测** — 请提供完整项目参数\n"
+                    final_answer += "3. **对比不同地区** — 请说明对比的地区\n"
+                elif history and len(history) > 2:
+                    final_answer = "感谢您的消息。基于我们之前的对话，请问您具体想了解：\n\n"
+                    final_answer += "- **调整预测参数**（请说明要修改的内容）\n"
+                    final_answer += "- **深入了解造价构成**（我可以详细解释）\n"
+                    final_answer += "- **了解地区差异**（请说明具体地区）\n"
+                    final_answer += "- **其他问题**（请具体描述）"
+                else:
+                    final_answer = "您好！请告诉我您的项目信息，我来帮您预测造价。\n\n"
+                    final_answer += "需要：建筑类型、总建筑面积、结构类型、所在地区、楼层数、装修标准"
 
         react_steps.append({"step": "final_answer", "content": final_answer[:200]})
 
+        # Safety net: ensure reply is never empty or too short
+        if not final_answer or len(final_answer.strip()) < 10:
+            print(f"[mock llm safety net] final_answer was empty/short (len={len(final_answer) if final_answer else 0}), intent={intent}")
+            final_answer = f"我理解了您的输入：「{user_message}」\n\n抱歉，我暂时无法给出详细回答。请尝试：\n- 描述具体的建筑项目信息来进行造价预测\n- 询问建筑造价术语的含义\n- 检查训练数据是否充分\n\n请问您需要什么帮助？"
+
+        print(f"[mock llm] intent={intent}, reply_len={len(final_answer)}, backend=ml_engine")
         return {
             "session_id": session_id,
             "reply": final_answer,
