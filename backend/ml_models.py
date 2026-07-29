@@ -1040,7 +1040,38 @@ def predict_with_real_models(
         region = REGION_COST_INDEX.get(project.get("location", "华东"), 1.0)
         fused_unit_price = base * struct * region
 
-    fused_total = fused_unit_price * total_area
+    # ---- 规模调整因子 ----
+    # 小项目固定成本分摊高，单方造价上浮；大项目规模经济，单方造价下浮
+    # 改进：使用对数曲线更真实地反映规模效应，并考虑建筑类型差异
+    import math
+    scale_factor = 1.0
+    scale_note = ""
+    project_type = project.get("project_type", "")
+    
+    if total_area > 0:
+        if total_area < 3000:
+            # 极小项目（独栋别墅、小型建筑）：单方造价大幅上浮
+            # 使用对数曲线，面积越小调整越大，最高上浮 60%
+            ratio = total_area / 3000.0
+            log_factor = math.log(1 + 9 * (1 - ratio)) / math.log(10)  # 0~1 曲线
+            scale_factor = 1.0 + 0.60 * log_factor
+            scale_factor = min(scale_factor, 1.60)
+            scale_note = f"极小项目规模调整（×{scale_factor:.2f}）：面积<3000m²，固定成本分摊极高，单方造价显著上浮"
+        elif total_area < 10000:
+            # 小型项目：面积越小，单方造价越高（上浮 25%~60%）
+            ratio = (total_area - 3000) / 7000.0  # 0~1
+            scale_factor = 1.25 + 0.35 * (1 - ratio)
+            scale_note = f"小型项目规模调整（×{scale_factor:.2f}）：面积3000~10000m²，固定成本分摊较高"
+        elif total_area > 100000:
+            # 大型项目：规模经济，单方造价下浮（最多下浮 12%）
+            excess = min(1.0, (total_area - 100000) / 200000.0)
+            scale_factor = 1.0 - 0.12 * excess
+            scale_note = f"大型项目规模调整（×{scale_factor:.2f}）：面积>{100000}m²，规模经济效应"
+        else:
+            scale_note = "标准规模项目，无需规模调整"
+
+    fused_unit_price_adjusted = fused_unit_price * scale_factor
+    fused_total = fused_unit_price_adjusted * total_area
 
     # 费用构成（基于规范比例）
     composition = {
@@ -1079,8 +1110,9 @@ def predict_with_real_models(
         "level": "68%"
     }
 
-    # ---- NEW: 参考项目（从训练数据中找相似项目）----
+    # ---- NEW: 参考项目（从训练数据中找相似项目，严格按建筑类型匹配）----
     reference_projects = []
+    reference_warning = ""
     if data_loader is not None:
         try:
             similar = data_loader.find_similar_projects(
@@ -1089,6 +1121,12 @@ def predict_with_real_models(
                 total_area,
                 limit=3,
             )
+            # 检查是否找到同类型项目
+            target_type = project.get("project_type", "")
+            same_type_found = any(s.get("建筑类型") == target_type for s in similar)
+            if similar and not same_type_found:
+                reference_warning = f"无{target_type}类型参考项目，使用最相似的其他类型项目"
+
             for s in similar:
                 reference_projects.append({
                     "name": s.get("项目名称", "未知"),
@@ -1172,7 +1210,10 @@ def predict_with_real_models(
         },
         "selected_models": selected_model_ids,
         "fused_total_cost": round(fused_total, 2),
-        "fused_unit_price": round(fused_unit_price, 2),
+        "fused_unit_price": round(fused_unit_price_adjusted, 2),
+        "fused_unit_price_raw": round(fused_unit_price, 2),
+        "scale_factor": round(scale_factor, 4),
+        "scale_note": scale_note,
         "average_accuracy": round(avg_accuracy, 1),
         "model_count": len(selected_model_ids),
         "composition": composition,
@@ -1181,6 +1222,7 @@ def predict_with_real_models(
         # NEW fields
         "confidence_interval": confidence_interval,
         "reference_projects": reference_projects,
+        "reference_warning": reference_warning,
         "model_evidence": model_evidence,
         "feature_importance": feature_importance,
         "data_sources": data_sources,

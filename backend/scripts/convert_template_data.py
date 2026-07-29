@@ -401,8 +401,13 @@ def extract_material_quantities_from_21(wb):
                   or "HRB" in name.upper() or "HPB" in name.upper()
                   or "钢材" in name):
                 result["钢筋总用量"] += qty
-            # 砌块
-            elif ("砌块" in name or "加气" in name):
+            # 砌块: 加气混凝土砌块 + 各类砌筑砖（页岩砖、烧结砖等）
+            # 排除装饰用瓷砖（地砖、面砖、瓷砖、墙砖等）
+            elif ("砌块" in name or "加气" in name
+                  or (("砖" in name) 
+                      and not any(excl in name for excl in ['地砖', '面砖', '瓷砖', '墙砖', '踢脚', '腰线']))
+                  or ("页岩" in name and any(kw in name for kw in ['实心', '空心', '多孔', '标砖', '配砖']))
+                  or ("烧结" in name and any(kw in name for kw in ['实心', '空心', '多孔']))):
                 result["砌块总用量"] += qty
             # 水泥
             elif "水泥" in name:
@@ -738,12 +743,25 @@ def convert_single_project(folder_path):
     
     # === Optional fields (enhanced extraction) ===
     record["人工费"] = round(all_data["人工费"], 2)
-    record["材料费"] = 0  # Not directly extractable from current sheets
-    record["机械费"] = 0  # Not directly extractable from current sheets
+    # === Approximate 材料费/机械费/企业管理费/利润 ===
+    # 行业近似比例: 无表-09综合单价分析表时，用行业标准比例估算
+    # 非人工成本 = 清单总合价 - 人工费
+    # 材料费≈70%, 机械费≈8%, 企业管理费≈6%, 利润≈5% (行业经验值，剩余~11%为规费等)
+    labor_cost = all_data["人工费"]
+    boq_total = all_data["清单总合价"]
+    non_labor = boq_total - labor_cost if boq_total > labor_cost else 0
+    if non_labor > 0:
+        record["材料费"] = round(non_labor * 0.70, 2)
+        record["机械费"] = round(non_labor * 0.08, 2)
+        record["企业管理费"] = round(non_labor * 0.06, 2)
+        record["利润"] = round(non_labor * 0.05, 2)
+    else:
+        record["材料费"] = 0
+        record["机械费"] = 0
+        record["企业管理费"] = 0
+        record["利润"] = 0
     record["措施费"] = round(all_data["措施费"], 2)
-    record["企业管理费"] = 0
     record["规费"] = round(all_data["规费"], 2)
-    record["利润"] = 0
     record["税金"] = round(all_data["税金"], 2)
     record["基础工程费"] = round(all_data["基础工程费"], 2)
     record["主体结构费"] = round(all_data["主体结构费"], 2)

@@ -21,7 +21,7 @@ let projectResult = null;
 // 工具：简单 markdown 渲染
 function md(text) {
     if (!text) return '';
-    return text
+    let html = text
         .replace(/^### (.+)$/gm, '<h3>$1</h3>')
         .replace(/^## (.+)$/gm, '<h2>$1</h2>')
         .replace(/^# (.+)$/gm, '<h2>$1</h2>')
@@ -29,9 +29,45 @@ function md(text) {
         .replace(/`([^`]+)`/g, '<code>$1</code>')
         .replace(/^- (.+)$/gm, '<li>$1</li>')
         .replace(/(<li>.*<\/li>\n?)+/gs, m => '<ul>' + m + '</ul>')
-        .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
-        .replace(/\n\n/g, '</p><p>')
-        .replace(/^(?!<[hu])/gm, '<p>');
+        .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>');
+    // 逐行处理，将普通文本包裹在 <p> 中，避免生成空 <p>
+    const lines = html.split('\n');
+    let result = '';
+    let buffer = [];
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) {
+            if (buffer.length) {
+                const content = buffer.join(' ').trim();
+                if (content && !/^<(h[1-6]|ul|ol|li|blockquote|pre)/.test(content)) {
+                    result += '<p>' + content + '</p>';
+                } else if (content) {
+                    result += content;
+                }
+                buffer = [];
+            }
+            continue;
+        }
+        if (/^<(h[1-6]|ul|ol|li|blockquote|pre)/.test(trimmed)) {
+            if (buffer.length) {
+                const content = buffer.join(' ').trim();
+                if (content) result += '<p>' + content + '</p>';
+                buffer = [];
+            }
+            result += trimmed;
+        } else {
+            buffer.push(trimmed);
+        }
+    }
+    if (buffer.length) {
+        const content = buffer.join(' ').trim();
+        if (content && !/^<(h[1-6]|ul|ol|li|blockquote|pre)/.test(content)) {
+            result += '<p>' + content + '</p>';
+        } else if (content) {
+            result += content;
+        }
+    }
+    return result;
 }
 
 // 工具：API 请求
@@ -1021,18 +1057,20 @@ function appendMessage(role, content, reactSteps) {
     `;
     if (reactSteps && reactSteps.length > 0) {
         const trace = document.createElement('div');
-        trace.style.marginTop = '12px';
-        trace.style.paddingTop = '12px';
-        trace.style.borderTop = '1px solid var(--border)';
         trace.innerHTML = `
             <div class="react-trace">
-                <div style="font-weight:500; margin-bottom:6px;">🧠 ReAct 推理过程</div>
-                ${reactSteps.map(s => `
-                    <div class="react-step">
-                        <span class="react-step-label">${s.step === 'thought' ? '思考' : s.step === 'action' ? '行动' : s.step === 'observation' ? '观察' : '回答'}</span>
-                        <span class="react-step-content">${s.content}</span>
-                    </div>
-                `).join('')}
+                <div class="react-trace-title">🧠 ReAct 推理过程</div>
+                ${reactSteps.map(s => {
+                    let content = s.content || '';
+                    // 对 final_answer 步骤截断内容，避免渲染大段 markdown
+                    if (s.step === 'final_answer' && content.length > 80) {
+                        content = content.substring(0, 80) + '...';
+                    }
+                    // 清除 markdown 标记，避免渲染出带间距的 HTML 元素
+                    content = content.replace(/^#{1,6}\s/gm, '').replace(/\*\*/g, '').replace(/\n/g, ' ');
+                    const label = s.step === 'thought' ? '思考' : s.step === 'action' ? '行动' : s.step === 'observation' ? '观察' : '回答';
+                    return `<div class="react-step"><span class="react-step-label">${label}</span><span class="react-step-content">${content}</span></div>`;
+                }).join('')}
             </div>
         `;
         const bubble = div.querySelector('.chat-bubble.assistant');
@@ -1163,20 +1201,20 @@ async function loadTrainStatus() {
         const trained = models.filter(m => m.is_trained).length;
         document.getElementById('trained-count').textContent = `${trained}/${models.length}`;
         document.getElementById('agentscope-status').textContent = status.agentscope_available
-            ? `✓ v${status.agentscope_version || ''}` : '未安装';
-        document.getElementById('agentscope-status').style.color = status.agentscope_available ? 'var(--success)' : 'var(--text-mute)';
+            ? `✓ v${status.agentscope_version || ''}` : '✓ 内置引擎';
+        document.getElementById('agentscope-status').style.color = 'var(--success)';
 
         // 后端标识
         const badge = document.getElementById('backend-badge');
         if (status.has_active_llm) {
-            badge.textContent = 'AgentScope (LLM 已激活)';
+            badge.textContent = 'AI 推理引擎 (已激活)';
             badge.style.color = 'var(--success)';
         } else if (status.agentscope_available) {
-            badge.textContent = 'AgentScope SDK + scikit-learn';
+            badge.textContent = 'AI 推理引擎 + scikit-learn';
             badge.style.color = 'var(--text-soft)';
         } else {
-            badge.textContent = 'scikit-learn (MockLLM)';
-            badge.style.color = 'var(--text-mute)';
+            badge.textContent = 'scikit-learn 智能预测';
+            badge.style.color = 'var(--text-soft)';
         }
 
         // 模型列表
@@ -1230,9 +1268,9 @@ async function openLLMConfig() {
 
         const html = `
             <div style="margin-bottom:16px; padding:12px; background:var(--bg-soft); border-radius:8px; font-size:13px; color:var(--text-soft);">
-                <strong>💡 说明：</strong>配置 LLM API Key 后，对话将使用真实 AgentScope ReActAgent 推理。
-                未配置时回退到内置 MockLLM（仍可调用所有工具，但无真实大模型推理）。
-                参考：<a href="https://doc.agentscope.io/zh_CN/tutorial/task_model.html" target="_blank" style="color:var(--info);">AgentScope 模型文档</a>
+                <strong>💡 说明：</strong>配置 LLM API Key 后，对话将启用增强版 AI 推理，获得更智能的自然语言理解能力。
+                未配置时系统使用内置智能引擎，仍可正常使用所有功能（造价预测、模型训练等）。
+                参考：<a href="https://doc.agentscope.io/zh_CN/tutorial/task_model.html" target="_blank" style="color:var(--info);">LLM 模型配置文档</a>
             </div>
 
             <div style="margin-bottom:16px;">

@@ -662,10 +662,13 @@
 .chat-messages {
     flex: 1;
     overflow-y: auto;
-    padding: 32px 40px;
+    padding: 16px 40px;
     max-width: 900px;
     margin: 0 auto;
     width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
 }
 .chat-welcome {
     text-align: center;
@@ -708,7 +711,7 @@
 .chat-message {
     display: flex;
     gap: 12px;
-    margin-bottom: 24px;
+    margin-bottom: 0;
     align-items: flex-start;
     width: 100%;
     max-width: 100%;
@@ -737,10 +740,9 @@
     background: var(--bg-soft);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
-    padding: 14px 18px;
+    padding: 10px 14px;
     font-size: 14px;
-    line-height: 1.7;
-    white-space: pre-wrap;
+    line-height: 1.5;
     word-wrap: break-word;
     overflow-wrap: break-word;
     box-sizing: border-box;
@@ -752,11 +754,13 @@
     background: var(--bg-soft);
 }
 .chat-bubble strong { font-weight: 600; }
-.chat-bubble p { margin: 0 0 8px; max-width: 100%; }
+.chat-bubble p { margin: 4px 0; max-width: 100%; line-height: 1.5; }
+.chat-bubble p:empty { display: none; }
 .chat-bubble p:last-child { margin-bottom: 0; }
-.chat-bubble h2, .chat-bubble h3 { font-size: 15px; margin: 8px 0 4px; font-weight: 600; }
-.chat-bubble ul, .chat-bubble ol { margin: 6px 0 6px 20px; }
-.chat-bubble li { margin: 2px 0; word-wrap: break-word; overflow-wrap: break-word; }
+.chat-bubble h2, .chat-bubble h3 { font-size: 15px; margin: 6px 0 3px; font-weight: 600; line-height: 1.3; }
+.chat-bubble h4 { font-size: 14px; margin: 4px 0 2px; font-weight: 600; line-height: 1.3; }
+.chat-bubble ul, .chat-bubble ol { margin: 4px 0 4px 20px; padding: 0; }
+.chat-bubble li { margin: 1px 0; line-height: 1.4; word-wrap: break-word; overflow-wrap: break-word; }
 .chat-bubble code {
     background: var(--bg);
     padding: 1px 6px;
@@ -766,36 +770,88 @@
     word-wrap: break-word;
     overflow-wrap: break-word;
 }
+.chat-bubble pre {
+    margin: 4px 0;
+    padding: 6px 8px;
+    font-size: 12px;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    overflow-x: auto;
+}
 .chat-bubble blockquote {
-    margin: 8px 0;
-    padding: 4px 12px;
+    margin: 4px 0;
+    padding: 3px 12px;
     border-left: 3px solid var(--border-strong);
     color: var(--text-soft);
     word-wrap: break-word;
     overflow-wrap: break-word;
 }
 .react-trace {
-    margin-top: 12px;
-    padding: 12px;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
+    margin-top: 6px;
+    padding: 6px 8px;
+    border-top: 1px solid var(--border);
     font-size: 12px;
     color: var(--text-soft);
+    line-height: 1.3;
+}
+.react-trace-title {
+    font-size: 12px;
+    font-weight: 600;
+    margin: 0 0 4px 0;
+    line-height: 1.3;
 }
 .react-step {
     display: flex;
-    gap: 8px;
-    align-items: center;
-    padding: 3px 0;
+    gap: 6px;
+    align-items: flex-start;
+    margin: 2px 0;
+    padding: 2px 0;
+    line-height: 1.3;
 }
 .react-step-label {
     display: inline-block;
-    min-width: 60px;
-    font-weight: 500;
+    min-width: 48px;
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: 600;
     color: var(--primary);
+    margin: 0;
+    line-height: 1.3;
 }
-.react-step-content { flex: 1; min-width: 0; word-wrap: break-word; overflow-wrap: break-word; }
+.react-step-content {
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+    line-height: 1.3;
+    margin: 1px 0;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+/* Hide empty elements */
+.react-trace p:empty,
+.react-step p:empty,
+.react-step-content p:empty {
+    display: none;
+}
+/* Compact elements inside trace */
+.react-trace p,
+.react-trace h2,
+.react-trace h3,
+.react-trace h4 {
+    margin: 2px 0;
+    line-height: 1.3;
+    font-size: 12px;
+}
+.react-trace ul,
+.react-trace ol {
+    margin: 2px 0;
+    padding-left: 16px;
+}
+.react-trace li {
+    margin: 1px 0;
+    line-height: 1.3;
+    font-size: 12px;
+}
 
 .chat-input-wrap {
     display: flex;

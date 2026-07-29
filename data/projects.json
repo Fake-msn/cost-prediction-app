@@ -1,0 +1,956 @@
+{
+  "PRJ20260728223200936": {
+    "id": "PRJ20260728223200936",
+    "input": {
+      "project_name": "测试住宅项目",
+      "project_type": "住宅",
+      "structure_type": "框架结构",
+      "total_area": 50000.0,
+      "floors": 18,
+      "location": "西南",
+      "build_year": 2023,
+      "decoration_level": "普通装修",
+      "stage": "estimation",
+      "selected_models": [
+        "total_pso_svr",
+        "section_xgb",
+        "indicator_rf"
+      ],
+      "basement_area": 0,
+      "building_height": 0
+    },
+    "result": {
+      "project": {
+        "name": "测试住宅项目",
+        "type": "住宅",
+        "structure": "框架结构",
+        "area": 50000.0,
+        "location": "西南"
+      },
+      "selected_models": [
+        "total_pso_svr",
+        "section_xgb",
+        "indicator_rf"
+      ],
+      "fused_total_cost": 162750699.04,
+      "fused_unit_price": 3255.01,
+      "fused_unit_price_raw": 3255.01,
+      "scale_factor": 1.0,
+      "scale_note": "标准规模项目，无需规模调整",
+      "average_accuracy": 79.6,
+      "model_count": 3,
+      "composition": {
+        "直接工程费": {
+          "ratio": 0.6,
+          "amount": 97650419.42235243,
+          "items": [
+            {
+              "name": "人工费",
+              "ratio": 0.2,
+              "amount": 32550139.807450816
+            },
+            {
+              "name": "材料费",
+              "ratio": 0.3,
+              "amount": 48825209.71117622
+            },
+            {
+              "name": "机械费",
+              "ratio": 0.1,
+              "amount": 16275069.903725408
+            }
+          ]
+        },
+        "间接费": {
+          "ratio": 0.15,
+          "amount": 24412604.85558811,
+          "items": [
+            {
+              "name": "企业管理费",
+              "ratio": 0.08,
+              "amount": 13020055.922980325
+            },
+            {
+              "name": "规费",
+              "ratio": 0.05,
+              "amount": 8137534.951862704
+            }
+          ]
+        },
+        "利润": {
+          "ratio": 0.07,
+          "amount": 11392548.932607785,
+          "items": []
+        },
+        "税金": {
+          "ratio": 0.04,
+          "amount": 6510027.961490163,
+          "items": []
+        },
+        "其他": {
+          "ratio": 0.14,
+          "amount": 22785097.86521557,
+          "items": []
+        }
+      },
+      "individual_predictions": {
+        "total_pso_svr": {
+          "model_id": "total_pso_svr",
+          "model_name": "建筑安装_总造价_[通用]_[PSO-SVR]",
+          "algorithm": "SVR (PSO-tuned)",
+          "accuracy": 96.8,
+          "predicted_value": 2987.2,
+          "target_field": "单方造价",
+          "train_samples": 1008,
+          "trained_at": "2026-07-28T19:39:53.423577"
+        },
+        "section_xgb": {
+          "model_id": "section_xgb",
+          "model_name": "分部工程_单方造价_[通用]_[XGBoost]",
+          "algorithm": "XGBoost",
+          "accuracy": 74.1,
+          "predicted_value": 3335.6,
+          "target_field": "单方造价",
+          "train_samples": 1008,
+          "trained_at": "2026-07-28T19:39:55.520436"
+        },
+        "indicator_rf": {
+          "model_id": "indicator_rf",
+          "model_name": "指标体系(无清单)_[通用]_[Random Forest]",
+          "algorithm": "Random Forest",
+          "accuracy": 68.0,
+          "predicted_value": 3548.44,
+          "target_field": "单方造价",
+          "train_samples": 1008,
+          "trained_at": "2026-07-28T19:39:58.627506"
+        }
+      },
+      "training_backend": "scikit-learn + xgboost",
+      "confidence_interval": {
+        "lower": 3056.88,
+        "upper": 3505.87,
+        "level": "68%"
+      },
+      "reference_projects": [
+        {
+          "name": "毗河新居安置小区“古窑西苑”建设工程",
+          "building_type": "住宅",
+          "area": 46122.9,
+          "unit_price": 2052.06,
+          "source": "real.xlsx"
+        },
+        {
+          "name": "崇州市青年公苑二期保障性住房项目（2、3、4#楼）",
+          "building_type": "住宅",
+          "area": 59846.08,
+          "unit_price": 1500.0,
+          "source": "real.xlsx"
+        },
+        {
+          "name": "被执行人成都海诚房地产开发有限公司在建的位于邛崃市司马大道的“海诚-司马赋”工程项目未完工部分的工程造价",
+          "building_type": "住宅",
+          "area": 56447.36,
+          "unit_price": 1500.0,
+          "source": "real.xlsx"
+        }
+      ],
+      "reference_warning": "",
+      "model_evidence": {
+        "training_samples": 1008,
+        "cv_r2_scores": {
+          "total_pso_svr_fold_0": 0.9768,
+          "total_pso_svr_fold_1": 0.9644,
+          "total_pso_svr_fold_2": 0.976,
+          "total_pso_svr_fold_3": 0.9486,
+          "total_pso_svr_fold_4": 0.9743,
+          "section_xgb_fold_0": 0.7331,
+          "section_xgb_fold_1": 0.7465,
+          "section_xgb_fold_2": 0.747,
+          "section_xgb_fold_3": 0.7326,
+          "section_xgb_fold_4": 0.7464,
+          "indicator_rf_fold_0": 0.7508,
+          "indicator_rf_fold_1": 0.6397,
+          "indicator_rf_fold_2": 0.6336,
+          "indicator_rf_fold_3": 0.6548,
+          "indicator_rf_fold_4": 0.7192
+        },
+        "data_sufficiency_score": 80.0
+      },
+      "feature_importance": {
+        "cat__建筑类型_住宅": 0.2792,
+        "cat__建筑类型_公共建筑": 0.0,
+        "cat__建筑类型_办公楼": 0.0,
+        "cat__建筑类型_医院": 0.0,
+        "cat__建筑类型_商业建筑": 0.0,
+        "cat__建筑类型_基础设施": 0.0178,
+        "cat__建筑类型_学校": 0.0,
+        "cat__建筑类型_工业建筑": 0.0088,
+        "cat__结构类型_剪力墙结构": 0.0,
+        "cat__结构类型_框剪结构": 0.0697,
+        "cat__结构类型_框架结构": 0.061,
+        "cat__结构类型_砖混结构": 0.0,
+        "cat__结构类型_钢结构": 0.0,
+        "cat__所在地区_东北": 0.0,
+        "cat__所在地区_华东": 0.0,
+        "cat__所在地区_华中": 0.0,
+        "cat__所在地区_华北": 0.0,
+        "cat__所在地区_华南": 0.0,
+        "cat__所在地区_四川": 0.0381,
+        "cat__所在地区_广元": 0.095,
+        "cat__所在地区_成都": 0.0,
+        "cat__所在地区_西北": 0.0,
+        "cat__所在地区_西南": 0.0,
+        "cat__装修标准_一般装修": 0.1605,
+        "cat__装修标准_普通装修": 0.0045,
+        "cat__装修标准_简单装修": 0.0158,
+        "cat__装修标准_精装": 0.0733,
+        "cat__装修标准_精装修": 0.0,
+        "cat__装修标准_豪华装修": 0.0109,
+        "num__总建筑面积": 0.0738,
+        "num__楼层数": 0.0916
+      },
+      "data_sources": [
+        {
+          "source_file": "real_training_data.xlsx",
+          "description": "真实工程造价项目数据",
+          "sample_count": 46,
+          "source_type": "real"
+        },
+        {
+          "source_file": "sample_training_data.xlsx",
+          "description": "系统生成的均衡样本数据",
+          "sample_count": 80,
+          "source_type": "simulated"
+        }
+      ],
+      "stage": "estimation",
+      "stage_info": {
+        "name": "估算阶段",
+        "description": "快速概览项目投资规模",
+        "accuracy": "70-80%",
+        "error_rate": "±20%",
+        "param_count": 7,
+        "applicable": "项目前期可行性研究 / 投资决策参考",
+        "basis": "类比估算 + 经验数据"
+      },
+      "predicted_at": "2026-07-28T22:32:00.052853"
+    },
+    "created_at": "2026-07-28T22:32:00.056451"
+  },
+  "PRJ20260728223418836": {
+    "id": "PRJ20260728223418836",
+    "input": {
+      "project_name": "独栋别墅",
+      "project_type": "住宅",
+      "structure_type": "框架结构",
+      "total_area": 5000.0,
+      "floors": 3,
+      "location": "西南",
+      "build_year": 2023,
+      "decoration_level": "普通装修",
+      "stage": "estimation",
+      "selected_models": [
+        "total_pso_svr",
+        "section_xgb",
+        "indicator_rf"
+      ],
+      "basement_area": 0,
+      "building_height": 0
+    },
+    "result": {
+      "project": {
+        "name": "独栋别墅",
+        "type": "住宅",
+        "structure": "框架结构",
+        "area": 5000.0,
+        "location": "西南"
+      },
+      "selected_models": [
+        "total_pso_svr",
+        "section_xgb",
+        "indicator_rf"
+      ],
+      "fused_total_cost": 23944876.38,
+      "fused_unit_price": 4788.98,
+      "fused_unit_price_raw": 3192.65,
+      "scale_factor": 1.5,
+      "scale_note": "小型项目规模调整（×1.50）：面积3000~10000m²，固定成本分摊较高",
+      "average_accuracy": 79.6,
+      "model_count": 3,
+      "composition": {
+        "直接工程费": {
+          "ratio": 0.6,
+          "amount": 14366925.828798657,
+          "items": [
+            {
+              "name": "人工费",
+              "ratio": 0.2,
+              "amount": 4788975.27626622
+            },
+            {
+              "name": "材料费",
+              "ratio": 0.3,
+              "amount": 7183462.914399329
+            },
+            {
+              "name": "机械费",
+              "ratio": 0.1,
+              "amount": 2394487.63813311
+            }
+          ]
+        },
+        "间接费": {
+          "ratio": 0.15,
+          "amount": 3591731.4571996643,
+          "items": [
+            {
+              "name": "企业管理费",
+              "ratio": 0.08,
+              "amount": 1915590.1105064878
+            },
+            {
+              "name": "规费",
+              "ratio": 0.05,
+              "amount": 1197243.819066555
+            }
+          ]
+        },
+        "利润": {
+          "ratio": 0.07,
+          "amount": 1676141.346693177,
+          "items": []
+        },
+        "税金": {
+          "ratio": 0.04,
+          "amount": 957795.0552532439,
+          "items": []
+        },
+        "其他": {
+          "ratio": 0.14,
+          "amount": 3352282.693386354,
+          "items": []
+        }
+      },
+      "individual_predictions": {
+        "total_pso_svr": {
+          "model_id": "total_pso_svr",
+          "model_name": "建筑安装_总造价_[通用]_[PSO-SVR]",
+          "algorithm": "SVR (PSO-tuned)",
+          "accuracy": 96.8,
+          "predicted_value": 2963.2,
+          "target_field": "单方造价",
+          "train_samples": 1008,
+          "trained_at": "2026-07-28T19:39:53.423577"
+        },
+        "section_xgb": {
+          "model_id": "section_xgb",
+          "model_name": "分部工程_单方造价_[通用]_[XGBoost]",
+          "algorithm": "XGBoost",
+          "accuracy": 74.1,
+          "predicted_value": 3165.89,
+          "target_field": "单方造价",
+          "train_samples": 1008,
+          "trained_at": "2026-07-28T19:39:55.520436"
+        },
+        "indicator_rf": {
+          "model_id": "indicator_rf",
+          "model_name": "指标体系(无清单)_[通用]_[Random Forest]",
+          "algorithm": "Random Forest",
+          "accuracy": 68.0,
+          "predicted_value": 3548.44,
+          "target_field": "单方造价",
+          "train_samples": 1008,
+          "trained_at": "2026-07-28T19:39:58.627506"
+        }
+      },
+      "training_backend": "scikit-learn + xgboost",
+      "confidence_interval": {
+        "lower": 3003.74,
+        "upper": 3471.93,
+        "level": "68%"
+      },
+      "reference_projects": [
+        {
+          "name": "住宅华东2021年第031号项目",
+          "building_type": "住宅",
+          "area": 6291.0,
+          "unit_price": 6606.82,
+          "source": "sample_training_data.xlsx"
+        },
+        {
+          "name": "天府新区成都片区直管区兴隆街道项目（三期）安置房建设项目",
+          "building_type": "住宅",
+          "area": 8976.53,
+          "unit_price": 1500.0,
+          "source": "real.xlsx"
+        },
+        {
+          "name": "天府新区成都片区直管区兴隆街道项目（三期）安置房建设项目",
+          "building_type": "住宅",
+          "area": 8976.53,
+          "unit_price": 1500.0,
+          "source": "real.xlsx"
+        }
+      ],
+      "reference_warning": "",
+      "model_evidence": {
+        "training_samples": 1008,
+        "cv_r2_scores": {
+          "total_pso_svr_fold_0": 0.9768,
+          "total_pso_svr_fold_1": 0.9644,
+          "total_pso_svr_fold_2": 0.976,
+          "total_pso_svr_fold_3": 0.9486,
+          "total_pso_svr_fold_4": 0.9743,
+          "section_xgb_fold_0": 0.7331,
+          "section_xgb_fold_1": 0.7465,
+          "section_xgb_fold_2": 0.747,
+          "section_xgb_fold_3": 0.7326,
+          "section_xgb_fold_4": 0.7464,
+          "indicator_rf_fold_0": 0.7508,
+          "indicator_rf_fold_1": 0.6397,
+          "indicator_rf_fold_2": 0.6336,
+          "indicator_rf_fold_3": 0.6548,
+          "indicator_rf_fold_4": 0.7192
+        },
+        "data_sufficiency_score": 80.0
+      },
+      "feature_importance": {
+        "cat__建筑类型_住宅": 0.2792,
+        "cat__建筑类型_公共建筑": 0.0,
+        "cat__建筑类型_办公楼": 0.0,
+        "cat__建筑类型_医院": 0.0,
+        "cat__建筑类型_商业建筑": 0.0,
+        "cat__建筑类型_基础设施": 0.0178,
+        "cat__建筑类型_学校": 0.0,
+        "cat__建筑类型_工业建筑": 0.0088,
+        "cat__结构类型_剪力墙结构": 0.0,
+        "cat__结构类型_框剪结构": 0.0697,
+        "cat__结构类型_框架结构": 0.061,
+        "cat__结构类型_砖混结构": 0.0,
+        "cat__结构类型_钢结构": 0.0,
+        "cat__所在地区_东北": 0.0,
+        "cat__所在地区_华东": 0.0,
+        "cat__所在地区_华中": 0.0,
+        "cat__所在地区_华北": 0.0,
+        "cat__所在地区_华南": 0.0,
+        "cat__所在地区_四川": 0.0381,
+        "cat__所在地区_广元": 0.095,
+        "cat__所在地区_成都": 0.0,
+        "cat__所在地区_西北": 0.0,
+        "cat__所在地区_西南": 0.0,
+        "cat__装修标准_一般装修": 0.1605,
+        "cat__装修标准_普通装修": 0.0045,
+        "cat__装修标准_简单装修": 0.0158,
+        "cat__装修标准_精装": 0.0733,
+        "cat__装修标准_精装修": 0.0,
+        "cat__装修标准_豪华装修": 0.0109,
+        "num__总建筑面积": 0.0738,
+        "num__楼层数": 0.0916
+      },
+      "data_sources": [
+        {
+          "source_file": "real_training_data.xlsx",
+          "description": "真实工程造价项目数据",
+          "sample_count": 46,
+          "source_type": "real"
+        },
+        {
+          "source_file": "sample_training_data.xlsx",
+          "description": "系统生成的均衡样本数据",
+          "sample_count": 80,
+          "source_type": "simulated"
+        }
+      ],
+      "stage": "estimation",
+      "stage_info": {
+        "name": "估算阶段",
+        "description": "快速概览项目投资规模",
+        "accuracy": "70-80%",
+        "error_rate": "±20%",
+        "param_count": 7,
+        "applicable": "项目前期可行性研究 / 投资决策参考",
+        "basis": "类比估算 + 经验数据"
+      },
+      "predicted_at": "2026-07-28T22:34:18.399720",
+      "project_id": "PRJ20260728223418836"
+    },
+    "created_at": "2026-07-28T22:34:18.399720"
+  },
+  "PRJ20260728223420598": {
+    "id": "PRJ20260728223420598",
+    "input": {
+      "project_name": "中型住宅",
+      "project_type": "住宅",
+      "structure_type": "框架结构",
+      "total_area": 20000.0,
+      "floors": 11,
+      "location": "西南",
+      "build_year": 2023,
+      "decoration_level": "普通装修",
+      "stage": "estimation",
+      "selected_models": [
+        "total_pso_svr",
+        "section_xgb",
+        "indicator_rf"
+      ],
+      "basement_area": 0,
+      "building_height": 0
+    },
+    "result": {
+      "project": {
+        "name": "中型住宅",
+        "type": "住宅",
+        "structure": "框架结构",
+        "area": 20000.0,
+        "location": "西南"
+      },
+      "selected_models": [
+        "total_pso_svr",
+        "section_xgb",
+        "indicator_rf"
+      ],
+      "fused_total_cost": 65382535.29,
+      "fused_unit_price": 3269.13,
+      "fused_unit_price_raw": 3269.13,
+      "scale_factor": 1.0,
+      "scale_note": "标准规模项目，无需规模调整",
+      "average_accuracy": 79.6,
+      "model_count": 3,
+      "composition": {
+        "直接工程费": {
+          "ratio": 0.6,
+          "amount": 39229521.17203851,
+          "items": [
+            {
+              "name": "人工费",
+              "ratio": 0.2,
+              "amount": 13076507.05734617
+            },
+            {
+              "name": "材料费",
+              "ratio": 0.3,
+              "amount": 19614760.586019255
+            },
+            {
+              "name": "机械费",
+              "ratio": 0.1,
+              "amount": 6538253.528673085
+            }
+          ]
+        },
+        "间接费": {
+          "ratio": 0.15,
+          "amount": 9807380.293009628,
+          "items": [
+            {
+              "name": "企业管理费",
+              "ratio": 0.08,
+              "amount": 5230602.822938468
+            },
+            {
+              "name": "规费",
+              "ratio": 0.05,
+              "amount": 3269126.7643365427
+            }
+          ]
+        },
+        "利润": {
+          "ratio": 0.07,
+          "amount": 4576777.47007116,
+          "items": []
+        },
+        "税金": {
+          "ratio": 0.04,
+          "amount": 2615301.411469234,
+          "items": []
+        },
+        "其他": {
+          "ratio": 0.14,
+          "amount": 9153554.94014232,
+          "items": []
+        }
+      },
+      "individual_predictions": {
+        "total_pso_svr": {
+          "model_id": "total_pso_svr",
+          "model_name": "建筑安装_总造价_[通用]_[PSO-SVR]",
+          "algorithm": "SVR (PSO-tuned)",
+          "accuracy": 96.8,
+          "predicted_value": 3022.03,
+          "target_field": "单方造价",
+          "train_samples": 1008,
+          "trained_at": "2026-07-28T19:39:53.423577"
+        },
+        "section_xgb": {
+          "model_id": "section_xgb",
+          "model_name": "分部工程_单方造价_[通用]_[XGBoost]",
+          "algorithm": "XGBoost",
+          "accuracy": 74.1,
+          "predicted_value": 3335.6,
+          "target_field": "单方造价",
+          "train_samples": 1008,
+          "trained_at": "2026-07-28T19:39:55.520436"
+        },
+        "indicator_rf": {
+          "model_id": "indicator_rf",
+          "model_name": "指标体系(无清单)_[通用]_[Random Forest]",
+          "algorithm": "Random Forest",
+          "accuracy": 68.0,
+          "predicted_value": 3548.44,
+          "target_field": "单方造价",
+          "train_samples": 1008,
+          "trained_at": "2026-07-28T19:39:58.627506"
+        }
+      },
+      "training_backend": "scikit-learn + xgboost",
+      "confidence_interval": {
+        "lower": 3084.74,
+        "upper": 3505.87,
+        "level": "68%"
+      },
+      "reference_projects": [
+        {
+          "name": "新都区锦城安置小区锦熙苑工程",
+          "building_type": "住宅",
+          "area": 20738.34,
+          "unit_price": 1576.17,
+          "source": "real.xlsx"
+        },
+        {
+          "name": "邛崃市平乐镇下坝新村·清平乐建设项目(二标段）",
+          "building_type": "住宅",
+          "area": 16169.76,
+          "unit_price": 1500.0,
+          "source": "real.xlsx"
+        },
+        {
+          "name": "邛崃市临邛街道办葫芦村元兴村安置点项目房建工程",
+          "building_type": "住宅",
+          "area": 21259.24,
+          "unit_price": 1500.0,
+          "source": "real.xlsx"
+        }
+      ],
+      "reference_warning": "",
+      "model_evidence": {
+        "training_samples": 1008,
+        "cv_r2_scores": {
+          "total_pso_svr_fold_0": 0.9768,
+          "total_pso_svr_fold_1": 0.9644,
+          "total_pso_svr_fold_2": 0.976,
+          "total_pso_svr_fold_3": 0.9486,
+          "total_pso_svr_fold_4": 0.9743,
+          "section_xgb_fold_0": 0.7331,
+          "section_xgb_fold_1": 0.7465,
+          "section_xgb_fold_2": 0.747,
+          "section_xgb_fold_3": 0.7326,
+          "section_xgb_fold_4": 0.7464,
+          "indicator_rf_fold_0": 0.7508,
+          "indicator_rf_fold_1": 0.6397,
+          "indicator_rf_fold_2": 0.6336,
+          "indicator_rf_fold_3": 0.6548,
+          "indicator_rf_fold_4": 0.7192
+        },
+        "data_sufficiency_score": 80.0
+      },
+      "feature_importance": {
+        "cat__建筑类型_住宅": 0.2792,
+        "cat__建筑类型_公共建筑": 0.0,
+        "cat__建筑类型_办公楼": 0.0,
+        "cat__建筑类型_医院": 0.0,
+        "cat__建筑类型_商业建筑": 0.0,
+        "cat__建筑类型_基础设施": 0.0178,
+        "cat__建筑类型_学校": 0.0,
+        "cat__建筑类型_工业建筑": 0.0088,
+        "cat__结构类型_剪力墙结构": 0.0,
+        "cat__结构类型_框剪结构": 0.0697,
+        "cat__结构类型_框架结构": 0.061,
+        "cat__结构类型_砖混结构": 0.0,
+        "cat__结构类型_钢结构": 0.0,
+        "cat__所在地区_东北": 0.0,
+        "cat__所在地区_华东": 0.0,
+        "cat__所在地区_华中": 0.0,
+        "cat__所在地区_华北": 0.0,
+        "cat__所在地区_华南": 0.0,
+        "cat__所在地区_四川": 0.0381,
+        "cat__所在地区_广元": 0.095,
+        "cat__所在地区_成都": 0.0,
+        "cat__所在地区_西北": 0.0,
+        "cat__所在地区_西南": 0.0,
+        "cat__装修标准_一般装修": 0.1605,
+        "cat__装修标准_普通装修": 0.0045,
+        "cat__装修标准_简单装修": 0.0158,
+        "cat__装修标准_精装": 0.0733,
+        "cat__装修标准_精装修": 0.0,
+        "cat__装修标准_豪华装修": 0.0109,
+        "num__总建筑面积": 0.0738,
+        "num__楼层数": 0.0916
+      },
+      "data_sources": [
+        {
+          "source_file": "real_training_data.xlsx",
+          "description": "真实工程造价项目数据",
+          "sample_count": 46,
+          "source_type": "real"
+        },
+        {
+          "source_file": "sample_training_data.xlsx",
+          "description": "系统生成的均衡样本数据",
+          "sample_count": 80,
+          "source_type": "simulated"
+        }
+      ],
+      "stage": "estimation",
+      "stage_info": {
+        "name": "估算阶段",
+        "description": "快速概览项目投资规模",
+        "accuracy": "70-80%",
+        "error_rate": "±20%",
+        "param_count": 7,
+        "applicable": "项目前期可行性研究 / 投资决策参考",
+        "basis": "类比估算 + 经验数据"
+      },
+      "predicted_at": "2026-07-28T22:34:20.499054",
+      "project_id": "PRJ20260728223420598"
+    },
+    "created_at": "2026-07-28T22:34:20.499054"
+  },
+  "PRJ20260728223422116": {
+    "id": "PRJ20260728223422116",
+    "input": {
+      "project_name": "大型住宅区",
+      "project_type": "住宅",
+      "structure_type": "框架结构",
+      "total_area": 50000.0,
+      "floors": 18,
+      "location": "西南",
+      "build_year": 2023,
+      "decoration_level": "普通装修",
+      "stage": "estimation",
+      "selected_models": [
+        "total_pso_svr",
+        "section_xgb",
+        "indicator_rf"
+      ],
+      "basement_area": 0,
+      "building_height": 0
+    },
+    "result": {
+      "project": {
+        "name": "大型住宅区",
+        "type": "住宅",
+        "structure": "框架结构",
+        "area": 50000.0,
+        "location": "西南"
+      },
+      "selected_models": [
+        "total_pso_svr",
+        "section_xgb",
+        "indicator_rf"
+      ],
+      "fused_total_cost": 162750699.04,
+      "fused_unit_price": 3255.01,
+      "fused_unit_price_raw": 3255.01,
+      "scale_factor": 1.0,
+      "scale_note": "标准规模项目，无需规模调整",
+      "average_accuracy": 79.6,
+      "model_count": 3,
+      "composition": {
+        "直接工程费": {
+          "ratio": 0.6,
+          "amount": 97650419.42235243,
+          "items": [
+            {
+              "name": "人工费",
+              "ratio": 0.2,
+              "amount": 32550139.807450816
+            },
+            {
+              "name": "材料费",
+              "ratio": 0.3,
+              "amount": 48825209.71117622
+            },
+            {
+              "name": "机械费",
+              "ratio": 0.1,
+              "amount": 16275069.903725408
+            }
+          ]
+        },
+        "间接费": {
+          "ratio": 0.15,
+          "amount": 24412604.85558811,
+          "items": [
+            {
+              "name": "企业管理费",
+              "ratio": 0.08,
+              "amount": 13020055.922980325
+            },
+            {
+              "name": "规费",
+              "ratio": 0.05,
+              "amount": 8137534.951862704
+            }
+          ]
+        },
+        "利润": {
+          "ratio": 0.07,
+          "amount": 11392548.932607785,
+          "items": []
+        },
+        "税金": {
+          "ratio": 0.04,
+          "amount": 6510027.961490163,
+          "items": []
+        },
+        "其他": {
+          "ratio": 0.14,
+          "amount": 22785097.86521557,
+          "items": []
+        }
+      },
+      "individual_predictions": {
+        "total_pso_svr": {
+          "model_id": "total_pso_svr",
+          "model_name": "建筑安装_总造价_[通用]_[PSO-SVR]",
+          "algorithm": "SVR (PSO-tuned)",
+          "accuracy": 96.8,
+          "predicted_value": 2987.2,
+          "target_field": "单方造价",
+          "train_samples": 1008,
+          "trained_at": "2026-07-28T19:39:53.423577"
+        },
+        "section_xgb": {
+          "model_id": "section_xgb",
+          "model_name": "分部工程_单方造价_[通用]_[XGBoost]",
+          "algorithm": "XGBoost",
+          "accuracy": 74.1,
+          "predicted_value": 3335.6,
+          "target_field": "单方造价",
+          "train_samples": 1008,
+          "trained_at": "2026-07-28T19:39:55.520436"
+        },
+        "indicator_rf": {
+          "model_id": "indicator_rf",
+          "model_name": "指标体系(无清单)_[通用]_[Random Forest]",
+          "algorithm": "Random Forest",
+          "accuracy": 68.0,
+          "predicted_value": 3548.44,
+          "target_field": "单方造价",
+          "train_samples": 1008,
+          "trained_at": "2026-07-28T19:39:58.627506"
+        }
+      },
+      "training_backend": "scikit-learn + xgboost",
+      "confidence_interval": {
+        "lower": 3056.88,
+        "upper": 3505.87,
+        "level": "68%"
+      },
+      "reference_projects": [
+        {
+          "name": "毗河新居安置小区“古窑西苑”建设工程",
+          "building_type": "住宅",
+          "area": 46122.9,
+          "unit_price": 2052.06,
+          "source": "real.xlsx"
+        },
+        {
+          "name": "崇州市青年公苑二期保障性住房项目（2、3、4#楼）",
+          "building_type": "住宅",
+          "area": 59846.08,
+          "unit_price": 1500.0,
+          "source": "real.xlsx"
+        },
+        {
+          "name": "被执行人成都海诚房地产开发有限公司在建的位于邛崃市司马大道的“海诚-司马赋”工程项目未完工部分的工程造价",
+          "building_type": "住宅",
+          "area": 56447.36,
+          "unit_price": 1500.0,
+          "source": "real.xlsx"
+        }
+      ],
+      "reference_warning": "",
+      "model_evidence": {
+        "training_samples": 1008,
+        "cv_r2_scores": {
+          "total_pso_svr_fold_0": 0.9768,
+          "total_pso_svr_fold_1": 0.9644,
+          "total_pso_svr_fold_2": 0.976,
+          "total_pso_svr_fold_3": 0.9486,
+          "total_pso_svr_fold_4": 0.9743,
+          "section_xgb_fold_0": 0.7331,
+          "section_xgb_fold_1": 0.7465,
+          "section_xgb_fold_2": 0.747,
+          "section_xgb_fold_3": 0.7326,
+          "section_xgb_fold_4": 0.7464,
+          "indicator_rf_fold_0": 0.7508,
+          "indicator_rf_fold_1": 0.6397,
+          "indicator_rf_fold_2": 0.6336,
+          "indicator_rf_fold_3": 0.6548,
+          "indicator_rf_fold_4": 0.7192
+        },
+        "data_sufficiency_score": 80.0
+      },
+      "feature_importance": {
+        "cat__建筑类型_住宅": 0.2792,
+        "cat__建筑类型_公共建筑": 0.0,
+        "cat__建筑类型_办公楼": 0.0,
+        "cat__建筑类型_医院": 0.0,
+        "cat__建筑类型_商业建筑": 0.0,
+        "cat__建筑类型_基础设施": 0.0178,
+        "cat__建筑类型_学校": 0.0,
+        "cat__建筑类型_工业建筑": 0.0088,
+        "cat__结构类型_剪力墙结构": 0.0,
+        "cat__结构类型_框剪结构": 0.0697,
+        "cat__结构类型_框架结构": 0.061,
+        "cat__结构类型_砖混结构": 0.0,
+        "cat__结构类型_钢结构": 0.0,
+        "cat__所在地区_东北": 0.0,
+        "cat__所在地区_华东": 0.0,
+        "cat__所在地区_华中": 0.0,
+        "cat__所在地区_华北": 0.0,
+        "cat__所在地区_华南": 0.0,
+        "cat__所在地区_四川": 0.0381,
+        "cat__所在地区_广元": 0.095,
+        "cat__所在地区_成都": 0.0,
+        "cat__所在地区_西北": 0.0,
+        "cat__所在地区_西南": 0.0,
+        "cat__装修标准_一般装修": 0.1605,
+        "cat__装修标准_普通装修": 0.0045,
+        "cat__装修标准_简单装修": 0.0158,
+        "cat__装修标准_精装": 0.0733,
+        "cat__装修标准_精装修": 0.0,
+        "cat__装修标准_豪华装修": 0.0109,
+        "num__总建筑面积": 0.0738,
+        "num__楼层数": 0.0916
+      },
+      "data_sources": [
+        {
+          "source_file": "real_training_data.xlsx",
+          "description": "真实工程造价项目数据",
+          "sample_count": 46,
+          "source_type": "real"
+        },
+        {
+          "source_file": "sample_training_data.xlsx",
+          "description": "系统生成的均衡样本数据",
+          "sample_count": 80,
+          "source_type": "simulated"
+        }
+      ],
+      "stage": "estimation",
+      "stage_info": {
+        "name": "估算阶段",
+        "description": "快速概览项目投资规模",
+        "accuracy": "70-80%",
+        "error_rate": "±20%",
+        "param_count": 7,
+        "applicable": "项目前期可行性研究 / 投资决策参考",
+        "basis": "类比估算 + 经验数据"
+      },
+      "predicted_at": "2026-07-28T22:34:22.571578"
+    },
+    "created_at": "2026-07-28T22:34:22.573093"
+  }
+}

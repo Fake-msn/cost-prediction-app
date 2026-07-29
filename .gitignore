@@ -32,6 +32,7 @@ Desktop.ini
 # Temp
 *.tmp
 test_*.json
+_test_*.json
 verify_*.py
 
 # LLM配置（含API Key，安全考虑必须排除）

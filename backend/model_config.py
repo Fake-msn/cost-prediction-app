@@ -323,6 +323,8 @@ def build_agentscope_model(config: LLMProviderConfig):
 
     except Exception as e:
         print(f"[build_agentscope_model] {config.provider}: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
     return None

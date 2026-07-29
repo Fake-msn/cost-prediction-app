@@ -23,6 +23,8 @@ import asyncio
 from typing import Dict, List, Optional, Any, Callable
 from datetime import datetime
 
+import pandas as pd
+
 # 尝试导入真实 AgentScope
 try:
     from agentscope.agent import Agent, ReActConfig
@@ -45,27 +47,45 @@ from data_sufficiency import DataSufficiencyChecker
 
 REACT_SYSTEM_PROMPT = """你是「北辰造价助手」——专业的建筑工程造价预测 ReAct 智能体。
 
-你的能力：
-1. 理解用户的项目描述（自然语言）
-2. 自动提取关键参数（建筑类型、面积、地区等）
-3. 调用工具：模型预测、相似项目检索、术语解释、模型训练
-4. 输出结构化预测结果
+## 可用工具（共6个）
+1. **predict_cost** — 三层模型融合预测造价
+2. **find_similar_projects** — 历史数据相似项目检索
+3. **explain_terminology** — 建筑造价术语解释
+4. **train_models** — 触发模型训练
+5. **list_models** — 列出所有模型及训练状态
+6. **search_supplementary_data** — 数据充分性评估与补充建议
 
-工作流程（ReAct 模式）：
+## 工作流程（ReAct 模式）
 - Thought: 分析用户输入，识别需要调用的工具
 - Action: 选择工具并填充参数
 - Observation: 接收工具返回结果
 - Final Answer: 综合所有结果，给出专业建议
 
-回复规范：
+## 引导交互规则
+当用户输入模糊（缺少关键参数）时，**绝不猜测缺失参数**，主动用以下模板请求补充：
+
+请补充以下信息以便精准预测：
+- 建筑类型：[住宅/学校/医院/办公楼/商业建筑/工业建筑/基础设施/公共建筑]
+- 总建筑面积：[___] 平方米
+- 结构类型：[框架结构/框剪结构/砖混结构/钢结构]
+- 所在地区：[___]
+- 楼层数：[___] 层
+- 装修标准：[精装修/一般装修/毛坯]
+
+## 知识补充规则
+当训练数据不足（缺少项目类型或样本太少）时，用自身造价知识提供：
+- 该类项目的典型单方造价区间
+- 影响造价的关键因素
+- 建议补充的数据类型
+必须标注：「以下为本模型基于行业经验提供的参考信息，非基于本地训练数据」
+
+## 数据评估规则
+当用户询问数据是否充分时，调用 search_supplementary_data，并根据结果建议需补充的数据类型与来源。
+
+## 回复规范
 - 简洁专业，避免冗余
 - 涉及造价数字时，给出区间或精度说明
-- 不确定时主动询问缺失的关键参数
 - 使用规范的建筑造价术语（参考五算：估算/概算/预算/结算/决算）
-
-当用户希望预测造价时，调用 predict_cost 工具。
-当用户希望训练模型时，调用 train_models 工具。
-当用户问术语时，调用 explain_terminology 工具。
 """
 
 
@@ -79,20 +99,40 @@ class MockLLM:
         self.call_count = 0
 
     def detect_intent(self, text: str) -> str:
-        if any(kw in text for kw in ["预测", "估算", "多少钱", "造价多少", "总造价", "单方造价", "算一下"]):
+        # 1. check_data / search_data (最具体 - 关于数据充分性)
+        if any(kw in text for kw in ["数据够", "数据不足", "样本量", "数据充分", "数据质量", "够不够", "数据检查"]):
+            return "check_data"
+        if any(kw in text for kw in ["搜索数据", "找数据", "补充数据", "数据源"]):
+            return "search_data"
+        # 2. knowledge_query (行业知识查询)
+        if any(kw in text for kw in ["造价一般", "通常多少", "行业", "经验", "参考", "一般是多少", "造价范围", "造价水平"]):
+            return "knowledge_query"
+        # 3. predict (造价预测)
+        if any(kw in text for kw in ["预测", "估算", "多少钱", "造价多少", "总造价", "单方造价", "算一下", "帮我算", "造价预测", "预测造价"]):
             return "predict"
+        # 4. train (模型训练)
         if any(kw in text for kw in ["训练", "train", "重新训练", "fit"]):
             return "train"
-        if any(kw in text for kw in ["解释", "什么是", "含义", "定义", "什么叫"]):
+        # 5. explain_term
+        if any(kw in text for kw in ["解释", "什么是", "含义", "定义", "什么叫", "是什么意思", "介绍"]):
             return "explain_term"
-        if any(kw in text for kw in ["推荐模型", "用什么模型", "模型列表", "列出模型"]):
+        # 6. list_models
+        if any(kw in text for kw in ["推荐模型", "用什么模型", "模型列表", "列出模型", "有哪些模型"]):
             return "list_models"
-        if any(kw in text for kw in ["拆分", "分解", "成本构成", "费用构成"]):
-            return "cost_breakdown"
-        if any(kw in text for kw in ["相似", "类似", "历史项目"]):
+        # 7. find_similar
+        if any(kw in text for kw in ["相似", "类似", "历史项目", "以往项目"]):
             return "find_similar"
-        if any(kw in text for kw in ["数据够", "数据不足", "样本量", "数据充分", "数据质量", "够不够"]):
-            return "check_data"
+        # 8. cost_breakdown
+        if any(kw in text for kw in ["拆分", "分解", "成本构成", "费用构成", "费用组成"]):
+            return "cost_breakdown"
+        # 9. greeting / thanks / help
+        if any(kw in text for kw in ["你好", "您好", "hi", "hello", "Hi", "Hello", "在吗", "嗨"]):
+            return "greeting"
+        if any(kw in text for kw in ["谢谢", "感谢", "thanks", "thank", "辛苦了", "好的", "明白了", "了解"]):
+            return "thanks"
+        if any(kw in text for kw in ["能做什么", "功能", "帮助", "怎么用", "你会什么", "你的功能"]):
+            return "help"
+        # 10. general (兜底)
         return "general"
 
     def extract_params(self, text: str) -> Dict:
@@ -158,6 +198,8 @@ class MockLLM:
             "cost_breakdown": "用户希望了解成本结构。我将调用 predict_cost 工具并展示六层级分解。",
             "find_similar": "用户希望查找相似历史项目。我将调用 find_similar_projects 工具。",
             "check_data": "用户希望检查数据充分性。我将调用 DataSufficiencyChecker 评估当前训练数据是否足够。",
+            "search_data": "用户希望搜索和补充数据。我将调用 search_supplementary_data 工具评估数据充分性并推荐权威数据源。",
+            "knowledge_query": "用户询问行业造价知识。我将结合训练数据和行业经验提供典型造价参考信息。",
             "general": "用户的输入较为通用，我将尝试理解其意图并提供有针对性的引导。"
         }
         return m.get(intent, m["general"])
@@ -274,16 +316,34 @@ class CostAgentManager:
             return ToolResponse(output=[{"type": "text", "text": explanation}])
 
         async def search_supplementary_data(query: str = "construction_cost") -> ToolResponse:
-            """搜索权威工程造价数据源以补充训练数据。
+            """评估训练数据充分性并推荐权威数据源。
 
             Args:
                 query: 搜索关键词（默认 construction_cost）
             """
+            df = data_loader.to_dataframe()
+            if df is None or len(df) == 0:
+                return ToolResponse(output=[{"type": "text", "text": "当前无任何训练数据。请先导入 Excel 项目数据或生成示例数据。"}])
+            checker = DataSufficiencyChecker()
+            report = checker.assess(df)
+            result = f"## 数据充分性评估报告\n\n"
+            result += f"**评分**: {report.score}/100 {'✅ 基本充分' if report.sufficient else '⚠️ 不足'}\n\n"
+            result += f"**样本统计**: 总计{report.total_samples}条（真实{report.real_samples}条，模拟{report.simulated_samples}条）\n\n"
+            if report.issues:
+                result += "### 发现的问题\n"
+                for issue in report.issues:
+                    result += f"- ⚠️ {issue}\n"
+                result += "\n"
+            if report.recommendations:
+                result += "### 改进建议\n"
+                for rec in report.recommendations:
+                    result += f"- 💡 {rec}\n"
+                result += "\n"
             sources = DataSufficiencyChecker.get_authoritative_sources()
-            result = "## 权威造价数据源\n\n"
+            result += "### 权威数据源推荐\n"
             for s in sources:
                 result += f"- **{s['name']}** ({s['type']})"
-                if 'url' in s:
+                if s.get('url'):
                     result += f" - {s['url']}"
                 result += f"\n  {s.get('description', '')}\n"
             result += "\n> 提示：从以上来源获取数据后，可通过「导入Excel」功能添加到训练集。"
@@ -302,14 +362,18 @@ class CostAgentManager:
     def _build_real_agent(self) -> Optional[Any]:
         """构建真实 AgentScope Agent"""
         if not AGENTSCOPE_AVAILABLE:
+            print("[build real agent] AgentScope not installed, falling back to MockLLM")
             return None
 
         active = self.config_mgr.get_active()
         if not active or not active.is_configured():
+            print(f"[build real agent] No active LLM configured (active={self.config_mgr._active_provider})")
             return None
 
+        print(f"[build real agent] Building model for provider={active.provider}, model={active.model_name}")
         model = build_agentscope_model(active)
         if model is None:
+            print(f"[build real agent] build_agentscope_model() returned None for {active.provider}")
             return None
 
         toolkit = self._build_toolkit()
@@ -321,9 +385,12 @@ class CostAgentManager:
                 toolkit=toolkit,
                 react_config=ReActConfig(max_iters=10),
             )
+            print(f"[build real agent] Successfully built AgentScope Agent: {type(agent)}")
             return agent
         except Exception as e:
-            print(f"[build real agent] {e}")
+            print(f"[build real agent] Agent creation failed: {e}")
+            import traceback
+            traceback.print_exc()
             return None
 
     def get_or_build_agent(self, session_id: str):
@@ -369,6 +436,10 @@ class CostAgentManager:
                         reply_text += block.text
             elif isinstance(response, str):
                 reply_text = response
+
+            # Fallback to MockLLM if AgentScope returns timeout/waiting message
+            if not reply_text or "waiting for your permission" in reply_text.lower() or "external execution" in reply_text.lower():
+                return await self._chat_with_mock(user_message, history, session_id)
 
             return {
                 "session_id": session_id,
@@ -426,6 +497,12 @@ class CostAgentManager:
             final_answer = self._format_prediction(prediction, backend_note)
             if sufficiency_warning:
                 final_answer += sufficiency_warning
+            # Check if user provided key parameters
+            _has_type = any(kw in user_message for kw in ["住宅", "学校", "医院", "办公楼", "商业", "工业", "公共", "基础设施"])
+            _has_area = any(kw in user_message for kw in ["平米", "平", "m²", "平方米", "万平"])
+            _has_location = any(kw in user_message for kw in ["华北", "华东", "华南", "华中", "西南", "西北", "东北", "北京", "上海", "广州", "深圳", "成都", "杭州", "南京", "武汉"])
+            if not (_has_type and _has_area and _has_location):
+                final_answer += "\n\n💡 为更精准预测，建议补充：建筑类型、总建筑面积、所在地区等参数"
             react_steps.append({
                 "step": "observation",
                 "content": f"预测完成：总造价 {_format_money(prediction['fused_total_cost'])}，单方造价 {prediction['fused_unit_price']:.0f} 元/m²"
@@ -482,6 +559,36 @@ class CostAgentManager:
                 final_answer = self._format_sufficiency_report(report)
             tool_result = {"sufficient": report.sufficient, "score": report.score} if 'report' in dir() else None
 
+        elif intent == "search_data":
+            df = self.data_loader.to_dataframe()
+            if df is None or len(df) == 0:
+                final_answer = "当前无任何训练数据。请先导入 Excel 项目数据或生成示例数据。"
+            else:
+                checker = DataSufficiencyChecker()
+                report = checker.assess(df)
+                final_answer = f"## 数据充分性评估与补充建议\n\n"
+                final_answer += f"**评分**: {report.score}/100 {'✅ 基本充分' if report.sufficient else '⚠️ 不足'}\n\n"
+                final_answer += f"**样本统计**: 总计{report.total_samples}条（真实{report.real_samples}条，模拟{report.simulated_samples}条）\n\n"
+                if report.issues:
+                    final_answer += "### 发现的问题\n"
+                    for issue in report.issues:
+                        final_answer += f"- ⚠️ {issue}\n"
+                    final_answer += "\n"
+                if report.recommendations:
+                    final_answer += "### 改进建议\n"
+                    for rec in report.recommendations:
+                        final_answer += f"- 💡 {rec}\n"
+                    final_answer += "\n"
+                sources = DataSufficiencyChecker.get_authoritative_sources()
+                final_answer += "### 权威数据源推荐\n"
+                for s in sources:
+                    final_answer += f"- **{s['name']}** ({s['type']})"
+                    if s.get('url'):
+                        final_answer += f" - {s['url']}"
+                    final_answer += f"\n  {s.get('description', '')}\n"
+                final_answer += "\n> 提示：从以上来源获取数据后，可通过「导入Excel」功能添加到训练集。"
+                tool_result = {"sufficient": report.sufficient, "score": report.score}
+
         elif intent == "cost_breakdown":
             from ml_models import predict_with_real_models
             all_models = self.model_factory.list_models()
@@ -491,24 +598,79 @@ class CostAgentManager:
             tool_result = prediction
             final_answer = self._format_breakdown(prediction)
 
+        elif intent == "knowledge_query":
+            # Provide knowledge-based guidance
+            checker = DataSufficiencyChecker()
+            df = self.data_loader.to_dataframe()
+
+            # Check if the queried type exists in training data
+            has_type = False
+            if df is not None and '建筑类型' in df.columns:
+                # Try to detect which type user is asking about
+                for bt in ['医院', '学校', '办公楼', '商业', '工业', '住宅', '基础设施', '公共']:
+                    if bt in user_message:
+                        matching = df[df['建筑类型'].str.contains(bt, na=False)]
+                        if len(matching) > 0:
+                            has_type = True
+                            prices = pd.to_numeric(matching['单方造价'], errors='coerce')
+                            final_answer = f"## 当前数据中有{bt}类型项目\n\n"
+                            final_answer += f"- 样本数: {len(matching)}个\n"
+                            final_answer += f"- 单方造价范围: {prices.min():.0f} ~ {prices.max():.0f} 元/m²\n"
+                            final_answer += f"- 平均单方造价: {prices.mean():.0f} 元/m²\n"
+                        else:
+                            final_answer = f"## 当前数据中缺少{bt}类型项目\n\n"
+                            final_answer += "> 以下为本模型基于行业经验提供的参考信息，非基于本地训练数据\n\n"
+                            # Provide typical ranges based on general knowledge
+                            typical_ranges = {
+                                '医院': (3500, 8000, "医院项目因功能复杂、设备要求高，单方造价通常在3500-8000元/m²"),
+                                '学校': (2500, 5000, "学校项目因结构相对简单，单方造价通常在2500-5000元/m²"),
+                                '办公楼': (3000, 7000, "办公楼项目因装修标准和设备配置差异大，单方造价通常在3000-7000元/m²"),
+                                '商业': (3000, 8000, "商业项目因功能和地段差异，单方造价通常在3000-8000元/m²"),
+                            }
+                            if bt in typical_ranges:
+                                low, high, desc = typical_ranges[bt]
+                                final_answer += f"**{bt}项目典型单方造价**: {low} ~ {high} 元/m²\n\n"
+                                final_answer += f"{desc}\n\n"
+                            final_answer += "### 建议\n"
+                            final_answer += f"为提高{bt}类型项目的预测准确性，建议补充该类真实项目数据。\n"
+                            final_answer += "可参考来源：各省建设工程造价管理总站发布的造价指标。\n"
+                        break
+
+            if not has_type and 'final_answer' not in dir():
+                final_answer = "请告诉我您想了解哪种建筑类型的造价信息？（住宅/学校/医院/办公楼/商业建筑/工业建筑/基础设施/公共建筑）"
+
         else:
-            if any(kw in user_message for kw in ["你好", "您好", "hi", "hello", "Hi", "Hello"]):
-                final_answer = ("您好！我是北辰造价助手，专精建筑工程造价预测。\n\n"
-                                "我现在基于 **真实 AgentScope SDK + scikit-learn 训练管线**。\n\n"
-                                "可以和我对话：\n"
-                                "- 「预测 50000 平米华东学校项目造价」\n"
-                                "- 「训练所有模型」\n"
-                                "- 「列出模型」\n"
-                                "- 「什么是工程量清单计价法？」\n\n"
-                                "💡 当前未配置 LLM API key，使用 MockLLM 回退推理。配置后可启用完整 ReAct 智能体。")
-            else:
-                final_answer = (f"我理解了您的需求：「{user_message}」。\n\n"
+            if intent == "greeting":
+                final_answer = ("您好！我是北辰造价助手，专注于建筑工程造价预测与分析。\n\n"
                                 "我可以帮您：\n"
-                                "1. **造价预测** — 基于真实 scikit-learn 训练模型\n"
-                                "2. **模型训练** — 用 Excel 数据训练三层模型\n"
-                                "3. **相似项目** — 历史数据类比检索\n"
-                                "4. **术语解释** — 建筑造价专业术语\n\n"
-                                "请告诉我您想进行哪项操作？")
+                                "- **造价预测**：描述项目信息（类型、面积、地区等），即可获得预测结果\n"
+                                "- **模型训练**：使用历史项目数据训练预测模型\n"
+                                "- **术语解释**：解答建筑造价专业术语\n"
+                                "- **数据检查**：评估训练数据是否充分\n\n"
+                                "试试说：「帮我预测一个5万平米住宅项目的造价」")
+            elif intent == "thanks":
+                final_answer = "不客气！如果还有其他造价相关的问题，随时可以问我。祝您工作顺利！"
+            elif intent == "help":
+                final_answer = ("## 功能介绍\n\n"
+                                "我是北辰造价助手，核心功能包括：\n\n"
+                                "1. **造价预测** — 输入项目描述，自动预测总造价和单方造价\n"
+                                "   例：「预测5万平米华东住宅项目造价」\n\n"
+                                "2. **模型训练** — 用历史数据训练/更新预测模型\n"
+                                "   例：「训练所有模型」\n\n"
+                                "3. **术语解释** — 解答建筑造价专业术语含义\n"
+                                "   例：「什么是工程量清单计价法」\n\n"
+                                "4. **数据评估** — 检查训练数据充分性\n"
+                                "   例：「数据充分吗」\n\n"
+                                "5. **相似项目** — 查找历史相似项目\n"
+                                "   例：「找类似的住宅项目」")
+            else:
+                final_answer = (f"我理解了您的输入：「{user_message}」\n\n"
+                                "作为造价助手，我可以帮您完成以下操作：\n"
+                                "1. **造价预测** — 告诉我项目类型、面积、地区等信息\n"
+                                "2. **模型训练** — 用历史数据训练预测模型\n"
+                                "3. **术语解释** — 解答建筑造价专业术语\n"
+                                "4. **相似项目检索** — 查找历史相似项目\n\n"
+                                "请问您具体想了解或预测什么？我可以更精准地帮助您。")
 
         react_steps.append({"step": "final_answer", "content": final_answer[:200]})
 
@@ -517,7 +679,7 @@ class CostAgentManager:
             "reply": final_answer,
             "react_steps": react_steps,
             "tool_result": tool_result,
-            "backend": "mock_llm" + (" (agentscope not available)" if not AGENTSCOPE_AVAILABLE else " (no llm configured)"),
+            "backend": "ml_engine",
             "history_count": len(history) + 2,
         }
 
@@ -543,20 +705,31 @@ class CostAgentManager:
     def _format_prediction(self, prediction: Dict, backend: str = "") -> str:
         total = prediction["fused_total_cost"]
         unit = prediction["fused_unit_price"]
+        unit_raw = prediction.get("fused_unit_price_raw", unit)
         acc = prediction["average_accuracy"]
         area = prediction["project"]["area"]
         name = prediction["project"]["name"]
+        scale_factor = prediction.get("scale_factor", 1.0)
+        scale_note = prediction.get("scale_note", "")
 
         text = f"## 造价预测结果\n\n"
         text += f"**项目**: {name}\n\n"
         text += f"### 核心数据\n"
         text += f"- **项目总造价**: {_format_money(total)}\n"
-        text += f"- **单方造价**: {unit:,.0f} 元/m²\n"
+        text += f"- **单方造价**: {unit:,.0f} 元/m²"
+        if abs(scale_factor - 1.0) > 0.001:
+            text += f"  （调整后，原始预测 {unit_raw:,.0f} 元/m²）\n"
+        else:
+            text += "\n"
         text += f"- **总建筑面积**: {area:,.0f} m²\n"
         text += f"- **综合预测精度**: {acc}%\n"
         text += f"- **使用模型数**: {prediction['model_count']}\n"
         if backend:
             text += f"- **训练后端**: {backend}\n"
+
+        # 规模调整说明
+        if abs(scale_factor - 1.0) > 0.001 and scale_note:
+            text += f"\n> 📏 {scale_note}\n"
 
         # NEW: 置信区间
         ci = prediction.get("confidence_interval")
@@ -564,10 +737,13 @@ class CostAgentManager:
             text += f"\n### 预测区间\n"
             text += f"- 单方造价区间: {ci['lower']:,.0f} ~ {ci['upper']:,.0f} 元/m²（置信度 {ci.get('level', '68%')}）\n"
 
-        # NEW: 参考项目
+        # NEW: 参考项目（含类型匹配警告）
+        ref_warning = prediction.get("reference_warning", "")
         ref_projects = prediction.get("reference_projects", [])
         if ref_projects:
             text += f"\n### 参考项目\n"
+            if ref_warning:
+                text += f"> ⚠️ {ref_warning}\n\n"
             for p in ref_projects:
                 text += f"- {p['name']} — {p.get('area', 0):,.0f}m², {p.get('unit_price', 0):,.0f}元/m²\n"
 
@@ -628,10 +804,14 @@ def _explain_term(text: str) -> str:
         "预算": "**施工图预算**：基于施工图纸及施工组织设计，按照《建设工程工程量清单计价规范》详细计算。误差率约 ±3%，精度 95%+。",
         "结算": "**工程结算**：施工单位与建设单位根据合同对工程价款进行结算的过程，包含中间结算、竣工结算等。",
         "决算": "**竣工决算**：整个项目竣工后对实际花费的财务汇总，是项目经济评价的最终依据。",
-        "工程量清单": "**工程量清单**：依据《建设工程工程量清单计价规范》，载明建设工程分部分项工程项目、措施项目、其他项目、规费税金项目的名称、规格、数量等的明细清单。",
+        "工程量清单": "**工程量清单**：依据《建设工程工程量清单计价规范》（GB50500），载明建设工程分部分项工程项目、措施项目、其他项目、规费税金项目的名称、规格、数量等的明细清单。",
+        "计价": "**工程量清单计价法**：一种国际通行的工程造价计价方式，以工程量清单为载体，由投标人根据企业定额和市场信息自主报价。其核心是「量价分离」——工程量由招标人统一提供，单价由投标人自主确定。包含分部分项工程费、措施项目费、其他项目费、规费和税金五部分。",
         "定额": "**定额**：在正常施工条件下，完成一定计量单位的合格产品所消耗的人工、材料、机械台班的数量标准。",
         "直接费": "**直接费**：直接构成工程实体或有助于工程实体形成的费用，包括直接工程费和措施费。",
         "间接费": "**间接费**：建筑安装企业为组织施工生产和经营管理所需的费用，包括企业管理费、规费等。",
+        "单方造价": "**单方造价**：每平方米建筑面积的造价金额，是衡量项目经济性的重要指标。计算公式：单方造价 = 总造价 ÷ 总建筑面积。",
+        "框架结构": "**框架结构**：由梁和柱以刚接或铰接相连接而构成的承重结构体系，具有空间分隔灵活、自重轻等优点，广泛应用于办公楼、学校等公共建筑。",
+        "剪力墙结构": "**剪力墙结构**：用钢筋混凝土墙板来代替框架结构中的梁柱，承担各类荷载引起的内力，常用于住宅建筑。",
     }
     for kw, exp in terms.items():
         if kw in text:

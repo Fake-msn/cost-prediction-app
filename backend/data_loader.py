@@ -174,33 +174,87 @@ class DataLoader:
         area: float,
         limit: int = 5
     ) -> List[Dict]:
-        """在历史数据中查找相似项目（用于类比估算）"""
+        """在历史数据中查找相似项目（用于类比估算）
+
+        匹配策略（优先级递减）：
+        1. 必须首先按建筑类型过滤（硬性约束）
+        2. 若无同类型项目，回退到最接近的类型并给出警告
+        3. 在同类型项目中按面积相似度排序
+        """
         if not self.history:
             return []
 
-        similar = []
+        # 第一轮：严格按建筑类型过滤
+        same_type = [
+            r for r in self.history
+            if r.get("建筑类型") == project_type
+        ]
+
+        if same_type:
+            # Additional name-based validation
+            type_keywords = {
+                '住宅': ['住宅', '安置', '小区', '楼', '住房', '公苑', '居', '苑', '房', '新村', '花园', '家园', '小区'],
+                '学校': ['学校', '学院', '教育', '教学', '校区'],
+                '商业建筑': ['商业', '商铺', '商场', '营业'],
+                '办公楼': ['办公', '写字楼', '行政'],
+                '公共建筑': ['文化', '图书', '展览', '体育', '综合', '整治', '环境', '服务'],
+                '工业建筑': ['厂房', '工业', '车间', '产业园'],
+                '基础设施': ['道路', '桥梁', '管网', '市政'],
+            }
+            keywords = type_keywords.get(project_type, [])
+            if keywords and len(same_type) > 3:
+                name_filtered = [p for p in same_type if any(kw in str(p.get('项目名称', '')) for kw in keywords)]
+                if len(name_filtered) >= 3:
+                    same_type = name_filtered
+
+            # 在同类型项目中按面积相似度排序
+            def area_similarity_score(record):
+                score = 0
+                if record.get("结构类型") == structure_type:
+                    score += 2
+                try:
+                    rec_area = float(record.get("总建筑面积", 0) or 0)
+                    if rec_area > 0 and area > 0:
+                        area_diff = abs(rec_area - area) / max(area, 1)
+                        if area_diff < 0.3:
+                            score += 3
+                        elif area_diff < 0.5:
+                            score += 2
+                        elif area_diff < 1.0:
+                            score += 1
+                except Exception:
+                    pass
+                return score
+
+            same_type.sort(key=area_similarity_score, reverse=True)
+            return same_type[:limit]
+
+        # 第二轮：无同类型项目，回退到面积最接近的其他类型
+        fallback = []
         for record in self.history:
+            rec_type = record.get("建筑类型", "")
+            if not rec_type or rec_type == project_type:
+                continue
             score = 0
-            if record.get("建筑类型") == project_type:
-                score += 3
             if record.get("结构类型") == structure_type:
-                score += 2
+                score += 1
             try:
                 rec_area = float(record.get("总建筑面积", 0) or 0)
-                if rec_area > 0:
-                    area_diff = abs(rec_area - area) / area
+                if rec_area > 0 and area > 0:
+                    area_diff = abs(rec_area - area) / max(area, 1)
                     if area_diff < 0.3:
-                        score += 2
+                        score += 3
                     elif area_diff < 0.5:
+                        score += 2
+                    elif area_diff < 1.0:
                         score += 1
             except Exception:
                 pass
-
             if score > 0:
-                similar.append((score, record))
+                fallback.append((score, record))
 
-        similar.sort(key=lambda x: -x[0])
-        return [r for _, r in similar[:limit]]
+        fallback.sort(key=lambda x: -x[0])
+        return [r for _, r in fallback[:limit]]
 
 
 def generate_sample_excel(output_path: str, n: int = 80):
