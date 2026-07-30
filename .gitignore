@@ -16,6 +16,8 @@ models_cache/
 
 # Data (含示例数据，保留但忽略历史)
 data/history.json
+data/uploads/
+data/*.duckdb
 
 # IDE
 .idea/

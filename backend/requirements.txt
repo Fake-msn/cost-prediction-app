@@ -1,7 +1,7 @@
 fastapi>=0.140.0
 uvicorn>=0.31.0
 python-multipart==0.0.9
-pandas==2.2.3
+pandas>=2.2.3
 openpyxl==3.1.2
 numpy>=1.26.4
 scikit-learn>=1.4.0
@@ -12,3 +12,9 @@ xgboost>=2.0.0
 duckdb>=0.10.0
 # AgentScope SDK - 用于真实 LLM 集成（可选，无则回退 MockLLM）
 agentscope>=2.0.4
+python-docx>=0.8.11
+pymupdf>=1.23.0
+pdfplumber>=0.10.0
+pytesseract>=0.3.10
+xlrd>=2.0.0
+Pillow>=10.0.0

@@ -19,6 +19,64 @@
 | 数据充分性 | DataSufficiencyChecker | 5维评估，自动检测数据缺口 |
 | 数据提取 | openpyxl + 自定义脚本 | 7种造价表解析（表-02/03/04/08/11/13/21）|
 
+### 依赖组件与版本
+
+| 组件 | 版本要求 | 说明 |
+|---|---|---|
+| Python | >= 3.11 | 运行环境 |
+| FastAPI | >= 0.140.0 | Web 框架 |
+| scikit-learn | >= 1.4.0 | ML 模型训练 |
+| pandas | >= 2.2.3 | 数据处理 |
+| xgboost | >= 2.0.0 | 梯度提升模型 |
+| agentscope | >= 2.0.4 | ReAct 智能体 SDK |
+| pymupdf | >= 1.23.0 | PDF 解析 |
+| pytesseract | >= 0.3.10 | OCR 文字识别 |
+| duckdb | >= 0.10.0 | 嵌入式数据库 |
+
+**系统级依赖：**
+
+- **Tesseract OCR**：PDF 扫描件 OCR 功能需要
+  - Ubuntu/Debian: `sudo apt-get install tesseract-ocr tesseract-ocr-chi-sim`
+  - macOS: `brew install tesseract tesseract-lang`
+  - Windows: 下载安装 [UB-Mannheim/tesseract](https://github.com/UB-Mannheim/tesseract/wiki)
+
+### 快速启动
+
+**方式一：一键启动（推荐）**
+
+```bash
+# Windows
+start.bat
+
+# Linux / macOS
+chmod +x start.sh && ./start.sh
+```
+
+自动完成：创建虚拟环境 → 激活 → 安装依赖 → 检测 Tesseract → 启动服务
+
+**方式二：Docker**
+
+```bash
+docker-compose up -d
+# 访问 http://localhost:8000
+```
+
+**方式三：手动启动**
+
+```bash
+python -m venv venv
+source venv/bin/activate   # Windows: venv\Scripts\activate
+pip install -r backend/requirements.txt
+python backend/main.py
+```
+
+**首次使用：**
+1. 浏览器打开 http://localhost:8000/app
+2. 左侧边栏切换到「数据」标签 → 系统已预载 47 个真实建设项目数据 + 80 条模拟样本
+3. 点击「训练所有模型」→ 8 个 sklearn 模型开始训练
+4. 切换到「向导模式」或「对话模式」开始预测
+5. （可选）点顶栏「⚙ LLM 配置」填入 API Key，启用真实智能体对话
+
 ---
 
 ## 快速开始

@@ -1021,3 +1021,13 @@
 .data-sources { margin-top: 12px; font-size: 13px; }
 .data-sources ul { list-style: none; padding: 0; }
 .data-sources li { padding: 4px 0; border-bottom: 1px solid var(--border); }
+
+/* File upload styles */
+#upload-section:hover {
+    border-color: var(--accent);
+    background: var(--bg-soft);
+}
+
+#upload-result table tr:nth-child(even) {
+    background: rgba(0,0,0,0.02);
+}

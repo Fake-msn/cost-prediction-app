@@ -1,0 +1,32 @@
+{
+    "active_provider": "",
+    "providers": {
+        "dashscope": {
+            "model_name": "qwen-max",
+            "api_key": "",
+            "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        },
+        "openai": {
+            "model_name": "gpt-4o-mini",
+            "api_key": "",
+            "base_url": "https://api.openai.com/v1"
+        },
+        "openai_compatible": {
+            "model_name": "deepseek-chat",
+            "api_key": "",
+            "base_url": "https://api.deepseek.com"
+        },
+        "anthropic": {
+            "model_name": "claude-3-5-sonnet",
+            "api_key": ""
+        },
+        "gemini": {
+            "model_name": "gemini-1.5-pro",
+            "api_key": ""
+        },
+        "ollama": {
+            "model_name": "qwen2.5:7b",
+            "base_url": "http://localhost:11434"
+        }
+    }
+}

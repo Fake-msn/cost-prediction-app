@@ -328,10 +328,26 @@ function renderStep1() {
 
         <div class="form-card">
             <div class="form-card-title">相关文件</div>
-            <div class="form-card-desc">上传项目相关文件，如概算批复、用地许可证、招投标文件等</div>
-            <div class="upload-zone" onclick="document.getElementById('file-input').click()">
-                <div class="upload-zone-icon">⬆️</div>
-                <div>点击或拖拽文件到此处上传</div>
+            <div class="form-card-desc">上传项目相关文件（概算批复、用地许可证、招投标文件等），自动提取项目特征</div>
+            <div id="upload-section" style="padding: 16px; border: 2px dashed var(--border); border-radius: 8px; text-align: center; cursor: pointer; transition: border-color 0.3s;"
+                 ondragover="event.preventDefault(); this.style.borderColor='var(--accent)'"
+                 ondragleave="this.style.borderColor='var(--border)'"
+                 ondrop="event.preventDefault(); this.style.borderColor='var(--border)'; handleFileUpload(event.dataTransfer.files[0])"
+                 onclick="document.getElementById('file-upload').click()">
+                <input type="file" id="file-upload" accept=".docx,.doc,.pdf,.xlsx,.xls" style="display: none;" onchange="handleFileUpload(this.files[0])">
+                <div id="upload-prompt">
+                    <p style="font-size: 24px; margin: 8px 0;">📄</p>
+                    <p style="margin: 4px 0; font-weight: 500;">点击或拖拽文件到此处上传</p>
+                    <p style="font-size: 12px; color: var(--text-soft);">支持 .docx .doc .pdf .xlsx .xls（最大 50MB）</p>
+                    <p style="font-size: 11px; color: var(--text-soft);">上传文件仅用于本次预测，不会纳入训练数据库</p>
+                </div>
+                <div id="upload-progress" style="display: none;">
+                    <p>正在解析文件...</p>
+                    <div style="width: 100%; height: 4px; background: var(--bg-soft); border-radius: 2px; margin-top: 8px;">
+                        <div id="upload-progress-bar" style="width: 0%; height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.3s;"></div>
+                    </div>
+                </div>
+                <div id="upload-result" style="display: none; text-align: left; margin-top: 12px;"></div>
             </div>
         </div>
     `;
@@ -896,6 +912,138 @@ function downloadReportHTML() {
     a.download = `造价分析报告_${projectResult.project.name}.html`;
     a.click();
     URL.revokeObjectURL(url);
+}
+
+// ============================================================
+// 文件上传处理
+// ============================================================
+async function handleFileUpload(file) {
+    if (!file) return;
+
+    // Validate
+    const ext = file.name.split('.').pop().toLowerCase();
+    const allowed = ['docx', 'doc', 'pdf', 'xlsx', 'xls'];
+    if (!allowed.includes(ext)) {
+        alert(`不支持的格式: .${ext}，支持: ${allowed.join(', ')}`);
+        return;
+    }
+
+    if (file.size > 50 * 1024 * 1024) {
+        alert('文件过大，限制 50MB');
+        return;
+    }
+
+    // Show progress
+    document.getElementById('upload-prompt').style.display = 'none';
+    document.getElementById('upload-progress').style.display = 'block';
+    document.getElementById('upload-result').style.display = 'none';
+
+    // Upload
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const response = await fetch('/api/predict/upload', {
+            method: 'POST',
+            body: formData,
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.detail || '上传失败');
+        }
+
+        // Show result
+        document.getElementById('upload-progress').style.display = 'none';
+        document.getElementById('upload-result').style.display = 'block';
+
+        // Display extracted features
+        let html = `<div style="padding: 12px; background: var(--bg-soft); border-radius: 6px;">`;
+        html += `<p style="font-weight: 500; margin-bottom: 8px;">✅ 文件解析完成：${data.filename}</p>`;
+        html += `<p style="font-size: 12px; color: var(--text-soft); margin-bottom: 8px;">格式: ${data.format} | 页数: ${data.pages} | 完整度: ${(data.completeness * 100).toFixed(0)}%</p>`;
+
+        if (data.features && Object.keys(data.features).length > 0) {
+            html += `<table style="width: 100%; font-size: 13px; border-collapse: collapse;">`;
+            const labels = {
+                'project_name': '项目名称', 'building_type': '建筑类型', 'structure_type': '结构类型',
+                'total_area': '总建筑面积(m²)', 'floor_count': '楼层数', 'location': '所在地区',
+                'build_year': '建造年份', 'decoration_standard': '装修标准',
+                'total_cost': '项目总造价(元)', 'unit_price': '单方造价(元/m²)'
+            };
+            for (const [key, value] of Object.entries(data.features)) {
+                if (key === 'confidence' || key === 'extraction_source') continue;
+                if (value !== null && value !== undefined) {
+                    const label = labels[key] || key;
+                    const confidence = data.confidence && data.confidence[key] ? ` (${(data.confidence[key] * 100).toFixed(0)}%可信)` : '';
+                    html += `<tr><td style="padding: 3px 8px 3px 0; color: var(--text-soft);">${label}:</td><td style="padding: 3px 0;"><strong>${value}</strong>${confidence}</td></tr>`;
+                }
+            }
+            html += `</table>`;
+        }
+
+        if (data.warnings && data.warnings.length > 0) {
+            html += `<p style="font-size: 12px; color: orange; margin-top: 8px;">⚠️ ${data.warnings.join('; ')}</p>`;
+        }
+
+        html += `<p style="font-size: 11px; color: var(--text-soft); margin-top: 8px;">💡 以上特征已自动填入预测表单，您可以手动修正后点击预测</p>`;
+        html += `</div>`;
+
+        document.getElementById('upload-result').innerHTML = html;
+
+        // Auto-fill wizard form with extracted features
+        autoFillWizardForm(data.features);
+
+    } catch (error) {
+        document.getElementById('upload-progress').style.display = 'none';
+        document.getElementById('upload-prompt').style.display = 'block';
+        alert(`上传失败: ${error.message}`);
+    }
+}
+
+function autoFillWizardForm(features) {
+    // Map backend feature keys to actual form field IDs
+    const fieldMap = {
+        'building_type': 'f-project_type',
+        'structure_type': 'f-structure_type',
+        'total_area': 'f-total_area',
+        'floor_count': 'f-floors',
+        'location': 'f-location',
+        'build_year': 'f-build_year',
+        'decoration_standard': 'f-decoration',
+        'project_name': 'f-project_name',
+    };
+
+    for (const [featureKey, elementId] of Object.entries(fieldMap)) {
+        const value = features[featureKey];
+        if (value !== null && value !== undefined) {
+            const el = document.getElementById(elementId);
+            if (el) {
+                el.value = value;
+                // Trigger change event for any listeners
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        }
+    }
+
+    // Also update projectData object to keep state in sync
+    const dataMap = {
+        'building_type': 'project_type',
+        'structure_type': 'structure_type',
+        'total_area': 'total_area',
+        'floor_count': 'floors',
+        'location': 'location',
+        'build_year': 'build_year',
+        'decoration_standard': 'decoration_level',
+        'project_name': 'project_name',
+    };
+    for (const [featureKey, dataKey] of Object.entries(dataMap)) {
+        const value = features[featureKey];
+        if (value !== null && value !== undefined) {
+            projectData[dataKey] = value;
+        }
+    }
 }
 
 // ============================================================

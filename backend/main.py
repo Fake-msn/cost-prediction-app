@@ -5,9 +5,11 @@ from __future__ import annotations
 import os
 import sys
 import json
+import uuid
+import shutil
 import asyncio
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Body
@@ -27,6 +29,8 @@ from ml_models import RealModelFactory, predict_with_real_models
 from data_loader import DataLoader, generate_sample_excel
 from model_config import ModelConfigManager
 from agent import CostAgentManager, AGENTSCOPE_AVAILABLE
+from document_parser import DocumentParser, ParseResult
+from feature_extractor import FeatureExtractor
 
 
 # ==================== App 初始化 ====================
@@ -53,6 +57,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 预测文件上传配置
+UPLOAD_DIR = os.path.join(ROOT, 'data', 'uploads')
+MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50MB
+ALLOWED_EXTENSIONS = {'.docx', '.doc', '.pdf', '.xlsx', '.xls'}
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # 全局单例
 MODELS_CACHE_DIR = os.path.join(ROOT, "models_cache")
@@ -516,6 +526,126 @@ async def update_llm_config(provider: str, req: dict = Body(...)):
         raise HTTPException(404, "提供商不存在")
     cost_agent.invalidate_agents()
     return {"success": True, "provider": provider}
+
+
+# ==================== 预测文件上传 API（数据隔离） ====================
+DB_PATH = os.path.join(ROOT, 'data', 'cost_prediction.duckdb')
+
+
+@app.post("/api/predict/upload")
+async def upload_for_prediction(file: UploadFile = File(...)):
+    """上传文件用于预测（严格隔离，不写入训练数据库）"""
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(400, f"不支持的格式: {ext}，支持: {ALLOWED_EXTENSIONS}")
+
+    content = await file.read()
+    if len(content) > MAX_UPLOAD_SIZE:
+        raise HTTPException(400, f"文件过大，限制: {MAX_UPLOAD_SIZE // 1024 // 1024}MB")
+
+    task_id = str(uuid.uuid4())[:8]
+    temp_path = os.path.join(UPLOAD_DIR, f"{task_id}_{file.filename}")
+
+    with open(temp_path, 'wb') as f:
+        f.write(content)
+
+    try:
+        parser = DocumentParser()
+        result = parser.parse(temp_path)
+
+        extractor = FeatureExtractor()
+        features = extractor.extract(result)
+
+        import duckdb
+        conn = duckdb.connect(DB_PATH)
+        conn.execute(
+            "INSERT INTO prediction_uploads (task_id, filename, file_format, extracted_features, expires_at) VALUES (?, ?, ?, ?, ?)",
+            [task_id, file.filename, result.file_format,
+             json.dumps(features.to_dict(), ensure_ascii=False),
+             (datetime.now() + timedelta(hours=24)).isoformat()]
+        )
+        conn.close()
+
+        return {
+            "task_id": task_id,
+            "filename": file.filename,
+            "format": result.file_format,
+            "is_scanned": result.is_scanned,
+            "pages": result.pages,
+            "features": features.to_dict(),
+            "completeness": features.completeness(),
+            "confidence": features.confidence,
+            "warnings": result.warnings,
+            "message": "文件解析完成，特征已提取。此数据仅用于本次预测，不会纳入训练数据库。"
+        }
+    except Exception as e:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        raise HTTPException(500, f"解析失败: {str(e)}")
+
+
+@app.get("/api/predict/upload/{task_id}/result")
+async def get_upload_result(task_id: str):
+    """获取上传文件的解析结果"""
+    import duckdb
+    conn = duckdb.connect(DB_PATH, read_only=True)
+    row = conn.execute(
+        "SELECT task_id, filename, file_format, uploaded_at, extracted_features, expires_at FROM prediction_uploads WHERE task_id = ?",
+        [task_id]
+    ).fetchone()
+    conn.close()
+
+    if not row:
+        raise HTTPException(404, "未找到该上传记录")
+
+    return {
+        "task_id": row[0],
+        "filename": row[1],
+        "format": row[2],
+        "uploaded_at": str(row[3]),
+        "features": json.loads(row[4]) if row[4] else {},
+        "expires_at": str(row[5]),
+    }
+
+
+@app.delete("/api/predict/upload/{task_id}")
+async def delete_upload(task_id: str):
+    """删除上传记录及临时文件"""
+    import duckdb
+    conn = duckdb.connect(DB_PATH)
+    conn.execute("DELETE FROM prediction_uploads WHERE task_id = ?", [task_id])
+    conn.close()
+
+    for f in os.listdir(UPLOAD_DIR):
+        if f.startswith(task_id):
+            try:
+                os.remove(os.path.join(UPLOAD_DIR, f))
+            except Exception:
+                pass
+
+    return {"deleted": task_id}
+
+
+@app.post("/api/predict/upload/cleanup")
+async def cleanup_expired_uploads():
+    """清理过期的上传记录（24小时）"""
+    import duckdb
+    conn = duckdb.connect(DB_PATH)
+    expired = conn.execute(
+        "SELECT task_id FROM prediction_uploads WHERE expires_at < CURRENT_TIMESTAMP"
+    ).fetchall()
+
+    for (task_id,) in expired:
+        conn.execute("DELETE FROM prediction_uploads WHERE task_id = ?", [task_id])
+        for f in os.listdir(UPLOAD_DIR):
+            if f.startswith(task_id):
+                try:
+                    os.remove(os.path.join(UPLOAD_DIR, f))
+                except Exception:
+                    pass
+
+    conn.close()
+    return {"cleaned": len(expired)}
 
 
 # ==================== 静态资源 ====================
