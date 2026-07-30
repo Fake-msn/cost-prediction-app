@@ -265,7 +265,7 @@ async def predict_project(req: ProjectRequest):
             req.selected_models = [
                 "total_pso_svr", "unit_gbt", "section_xgb",
                 "subsection_xgb", "item_xgb", "indicator_rf",
-                "boq_apriori", "boq_lr"
+                "boq_xgb", "boq_lr_v2"
             ]
 
     # 优先用已训练模型，未训练的也加入（会用基准价兜底）
@@ -433,18 +433,36 @@ async def get_project(project_id: str):
 # ==================== 模型训练 API ====================
 @app.post("/api/train")
 async def train_all_models():
-    """训练所有三层模型（使用已加载的历史数据）"""
+    """训练所有三层模型（使用已加载的历史数据 + DuckDB BOQ清单项数据）"""
     df = data_loader.to_dataframe()
     if df is None or len(df) == 0:
         raise HTTPException(400, "无训练数据，请先导入 Excel 或生成示例数据")
-    results = model_factory.train_all(df)
+
+    # 加载BOQ清单项数据用于L3模型
+    boq_df = data_loader.load_boq_items_from_duckdb()
+    boq_info = f"{len(boq_df)} 条BOQ清单项" if boq_df is not None and len(boq_df) > 0 else "无BOQ数据"
+
+    results = model_factory.train_all(df, boq_df=boq_df)
     trained = sum(1 for r in results.values() if r.get("success"))
+
+    # 删除旧模型文件
+    for old_file in ["boq_apriori.joblib", "boq_lr.joblib"]:
+        old_path = os.path.join(MODELS_CACHE_DIR, old_file)
+        if os.path.exists(old_path):
+            try:
+                os.remove(old_path)
+                print(f"[train] 删除旧模型文件: {old_file}")
+            except Exception as e:
+                print(f"[train] 删除旧模型文件失败 {old_file}: {e}")
+
     return {
         "success": True,
         "total": len(results),
         "trained": trained,
         "failed": len(results) - trained,
         "sample_count": len(df),
+        "boq_sample_count": len(boq_df) if boq_df is not None else 0,
+        "boq_info": boq_info,
         "results": results,
         "backend": "scikit-learn"
     }
@@ -456,7 +474,13 @@ async def train_one_model(model_id: str):
     df = data_loader.to_dataframe()
     if df is None or len(df) == 0:
         raise HTTPException(400, "无训练数据")
-    result = model_factory.train_one(model_id, df)
+    # BOQ模型需要清单项数据
+    boq_df = None
+    if model_id in RealModelFactory.BOQ_MODEL_IDS:
+        boq_df = data_loader.load_boq_items_from_duckdb()
+        if boq_df is None or len(boq_df) == 0:
+            raise HTTPException(400, "BOQ模型需要DuckDB中的清单项数据")
+    result = model_factory.train_one(model_id, df, boq_df=boq_df)
     if not result.get("success"):
         raise HTTPException(400, result.get("error", "训练失败"))
     return result

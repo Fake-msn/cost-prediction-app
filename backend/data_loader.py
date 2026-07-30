@@ -223,6 +223,64 @@ class DataLoader:
         finally:
             conn.close()
 
+    def load_boq_items_from_duckdb(self, db_path=None):
+        """从DuckDB加载BOQ清单项用于L3模型训练
+
+        修复: boq_items.project_id (hex格式) 与 project_meta.project_id (P00xx格式)
+        无法直接JOIN，因此直接加载所有BOQ items，并从boq_code前缀推导division。
+        项目级特征(building_type等)使用默认值，由extract_boq_features处理。
+        """
+        import duckdb as _duckdb
+        if db_path is None:
+            db_path = self.db_path  # 使用DataLoader已配置的数据库路径
+        if not os.path.exists(db_path):
+            print(f"[DataLoader] DuckDB文件不存在: {db_path}")
+            return None
+
+        conn = _duckdb.connect(db_path, read_only=True)
+        try:
+            # 直接从boq_items加载，不做无效JOIN
+            # 使用COALESCE从boq_code前缀推导division，确保所有item都有division值
+            df = conn.execute("""
+                SELECT 
+                    bi.project_id, bi.boq_code,
+                    COALESCE(bi.division, 
+                        CASE SUBSTR(bi.boq_code, 1, 2)
+                            WHEN '00' THEN '土建结构'
+                            WHEN '01' THEN '土建结构'
+                            WHEN '02' THEN '门窗工程'
+                            WHEN '03' THEN '安装工程'
+                            WHEN '04' THEN '装饰装修'
+                            WHEN '05' THEN '装饰装修'
+                            WHEN '07' THEN '土建结构'
+                            WHEN '20' THEN '其他'
+                            ELSE '未知'
+                        END
+                    ) AS division,
+                    bi.trade,
+                    bi.unit, bi.quantity, bi.comp_unit_price,
+                    bi.is_active
+                FROM boq_items bi
+                WHERE bi.is_active = 1 
+                  AND bi.comp_unit_price > 0
+            """).fetchdf()
+        except Exception as e:
+            print(f"[DataLoader] load_boq_items_from_duckdb 失败: {e}")
+            conn.close()
+            return None
+        conn.close()
+
+        if df is not None and len(df) > 0:
+            # 项目级特征使用默认值（boq_items与project_meta的ID格式不匹配）
+            df['building_type'] = '未知'
+            df['structure_type'] = '未知'
+            df['location'] = '未知'
+            df['above_ground_floors'] = 0
+            df['total_area'] = 0
+            df['build_year'] = 2020
+            print(f"[DataLoader] 从DuckDB加载 {len(df)} 条BOQ清单项 (全量，含推导division)")
+        return df
+
     def get_boq_items(self, project_id: str = None) -> List[Dict]:
         """从 DuckDB 获取清单条目"""
         if not HAS_DUCKDB or not os.path.exists(self.db_path):

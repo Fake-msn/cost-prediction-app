@@ -214,6 +214,35 @@ def extract_tree_features(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ===========================================
+# BOQ 清单项特征工程（L3 item级模型）
+# ===========================================
+def build_boq_preprocessor() -> ColumnTransformer:
+    """BOQ item特征预处理器"""
+    categorical = ['division', 'boq_code_prefix4', 'unit', 'building_type', 'structure_type', 'region']
+    numeric = ['log_quantity', 'floor_count', 'total_area', 'build_year']
+    return ColumnTransformer([
+        ("cat", OneHotEncoder(handle_unknown="ignore", sparse_output=False), categorical),
+        ("num", StandardScaler(), numeric),
+    ])
+
+
+def extract_boq_features(df: pd.DataFrame) -> pd.DataFrame:
+    """从BOQ item DataFrame提取特征"""
+    feature_df = pd.DataFrame()
+    feature_df['division'] = df['division'].astype(str)
+    feature_df['boq_code_prefix4'] = df['boq_code'].str[:4].fillna('0000')
+    feature_df['unit'] = df['unit'].fillna('未知').astype(str)
+    feature_df['building_type'] = df.get('building_type', pd.Series(['未知']*len(df))).fillna('未知').astype(str)
+    feature_df['structure_type'] = df.get('structure_type', pd.Series(['未知']*len(df))).fillna('未知').astype(str)
+    feature_df['region'] = df.get('location', pd.Series(['未知']*len(df))).fillna('未知').astype(str)
+    feature_df['log_quantity'] = np.log1p(pd.to_numeric(df['quantity'], errors='coerce').fillna(0))
+    feature_df['floor_count'] = pd.to_numeric(df.get('above_ground_floors', pd.Series([0]*len(df))), errors='coerce').fillna(0)
+    feature_df['total_area'] = np.log1p(pd.to_numeric(df.get('total_area', pd.Series([0]*len(df))), errors='coerce').fillna(0))
+    feature_df['build_year'] = pd.to_numeric(df.get('build_year', pd.Series([2020]*len(df))), errors='coerce').fillna(2020)
+    return feature_df
+
+
+# ===========================================
 # 真实训练模型基类
 # ===========================================
 @dataclass
@@ -806,7 +835,7 @@ class IndicatorRFModel(RealTrainedModel):
 
 
 class ConcreteLRModel(RealTrainedModel):
-    """Linear Regression 混凝土单方耗量预测"""
+    """Linear Regression 混凝土单方耗量预测（保留向后兼容）"""
     def __init__(self):
         super().__init__(TrainedModelInfo(
             model_id="boq_lr",
@@ -818,6 +847,154 @@ class ConcreteLRModel(RealTrainedModel):
 
     def _build_estimator(self):
         return LinearRegression()
+
+
+# ===========================================
+# L3 BOQ item级数据驱动模型（替代硬编码 Apriori）
+# ===========================================
+class BOQXGBModel(RealTrainedModel):
+    """L3清单项目层 - XGBoost item级综合单价预测"""
+
+    def __init__(self):
+        super().__init__(TrainedModelInfo(
+            model_id="boq_xgb",
+            name="清单项目_XGBoost",
+            algorithm="XGBoost (item级综合单价)",
+            layer="L3",
+            target_field="log1p_comp_unit_price",
+        ))
+
+    def _build_estimator(self):
+        try:
+            from xgboost import XGBRegressor
+            return XGBRegressor(
+                n_estimators=200, max_depth=6, learning_rate=0.05,
+                subsample=0.8, colsample_bytree=0.8, random_state=42, n_jobs=-1
+            )
+        except ImportError:
+            from sklearn.ensemble import GradientBoostingRegressor
+            return GradientBoostingRegressor(
+                n_estimators=200, max_depth=6, learning_rate=0.05,
+                subsample=0.8, random_state=42
+            )
+
+    def train(self, df, target_field="comp_unit_price", models_dir="models_cache"):
+        X = extract_boq_features(df)
+        y = np.log1p(pd.to_numeric(df[target_field], errors='coerce').fillna(0))
+        mask = (y > 0) & (~X.isna().any(axis=1))
+        X, y = X[mask], y[mask]
+
+        if len(X) < 100:
+            return {"success": False, "error": f"样本不足({len(X)})"}
+
+        preprocessor = build_boq_preprocessor()
+        estimator = self._build_estimator()
+        pipeline = Pipeline([("preprocess", preprocessor), ("model", estimator)])
+
+        cv = RepeatedKFold(n_splits=5, n_repeats=3, random_state=42)
+        try:
+            cv_scores = cross_val_score(pipeline, X, y, cv=cv, scoring='r2', n_jobs=-1)
+            r2 = max(0, float(cv_scores.mean()))
+        except Exception:
+            cv_scores = cross_val_score(pipeline, X, y, cv=5, scoring='r2')
+            r2 = max(0, float(cv_scores.mean()))
+
+        pipeline.fit(X, y)
+
+        self.pipeline = pipeline
+        self.info.cv_r2 = round(r2 * 100, 1)
+        self.info.accuracy = self.info.cv_r2
+        self.info.train_samples = len(X)
+        self.info.is_trained = True
+        self.info.trained_at = datetime.now().isoformat()
+        self._uses_log_transform = True
+
+        os.makedirs(models_dir, exist_ok=True)
+        joblib.dump({
+            "pipeline": pipeline,
+            "info": {
+                "model_id": self.info.model_id, "name": self.info.name,
+                "algorithm": self.info.algorithm, "layer": self.info.layer,
+                "accuracy": self.info.accuracy, "mape": self.info.mape,
+                "train_samples": self.info.train_samples,
+                "trained_at": self.info.trained_at,
+            },
+            "accuracy": self.info.accuracy,
+            "mape": self.info.mape,
+            "train_samples": self.info.train_samples,
+            "trained_at": self.info.trained_at,
+            "uses_log_transform": True,
+        }, os.path.join(models_dir, f"{self.info.model_id}.joblib"))
+
+        print(f"[train {self.info.model_id}] R²={self.info.accuracy}%, samples={len(X)}")
+        return {"success": True, "accuracy": self.info.accuracy, "train_samples": len(X)}
+
+
+class BOQLRModelV2(RealTrainedModel):
+    """L3清单项目层 - LinearRegression item级综合单价（可解释对照）"""
+
+    def __init__(self):
+        super().__init__(TrainedModelInfo(
+            model_id="boq_lr_v2",
+            name="清单项目_LR",
+            algorithm="LinearRegression (item级综合单价)",
+            layer="L3",
+            target_field="log1p_comp_unit_price",
+        ))
+
+    def _build_estimator(self):
+        return LinearRegression()
+
+    def train(self, df, target_field="comp_unit_price", models_dir="models_cache"):
+        X = extract_boq_features(df)
+        y = np.log1p(pd.to_numeric(df[target_field], errors='coerce').fillna(0))
+        mask = (y > 0) & (~X.isna().any(axis=1))
+        X, y = X[mask], y[mask]
+
+        if len(X) < 100:
+            return {"success": False, "error": f"样本不足({len(X)})"}
+
+        preprocessor = build_boq_preprocessor()
+        estimator = self._build_estimator()
+        pipeline = Pipeline([("preprocess", preprocessor), ("model", estimator)])
+
+        cv = RepeatedKFold(n_splits=5, n_repeats=3, random_state=42)
+        try:
+            cv_scores = cross_val_score(pipeline, X, y, cv=cv, scoring='r2', n_jobs=-1)
+            r2 = max(0, float(cv_scores.mean()))
+        except Exception:
+            cv_scores = cross_val_score(pipeline, X, y, cv=5, scoring='r2')
+            r2 = max(0, float(cv_scores.mean()))
+
+        pipeline.fit(X, y)
+
+        self.pipeline = pipeline
+        self.info.cv_r2 = round(r2 * 100, 1)
+        self.info.accuracy = self.info.cv_r2
+        self.info.train_samples = len(X)
+        self.info.is_trained = True
+        self.info.trained_at = datetime.now().isoformat()
+        self._uses_log_transform = True
+
+        os.makedirs(models_dir, exist_ok=True)
+        joblib.dump({
+            "pipeline": pipeline,
+            "info": {
+                "model_id": self.info.model_id, "name": self.info.name,
+                "algorithm": self.info.algorithm, "layer": self.info.layer,
+                "accuracy": self.info.accuracy, "mape": self.info.mape,
+                "train_samples": self.info.train_samples,
+                "trained_at": self.info.trained_at,
+            },
+            "accuracy": self.info.accuracy,
+            "mape": self.info.mape,
+            "train_samples": self.info.train_samples,
+            "trained_at": self.info.trained_at,
+            "uses_log_transform": True,
+        }, os.path.join(models_dir, f"{self.info.model_id}.joblib"))
+
+        print(f"[train {self.info.model_id}] R²={self.info.accuracy}%, samples={len(X)}")
+        return {"success": True, "accuracy": self.info.accuracy, "train_samples": len(X)}
 
 
 # ===========================================
@@ -895,6 +1072,9 @@ class RealModelFactory:
         self._models: Dict[str, Any] = {}
         self._register()
 
+    # BOQ模型ID集合（需要BOQ item数据而非项目级数据）
+    BOQ_MODEL_IDS = {"boq_xgb", "boq_lr_v2"}
+
     def _register(self):
         self._models = {
             "total_pso_svr": TotalCostSVRModel(),
@@ -903,6 +1083,9 @@ class RealModelFactory:
             "subsection_xgb": SubsectionXGBModel(),
             "item_xgb": ItemXGBModel(),
             "indicator_rf": IndicatorRFModel(),
+            "boq_xgb": BOQXGBModel(),
+            "boq_lr_v2": BOQLRModelV2(),
+            # 向后兼容：保留旧模型ID映射
             "boq_apriori": BOQCompositionAprioriModel(),
             "boq_lr": ConcreteLRModel(),
         }
@@ -931,7 +1114,7 @@ class RealModelFactory:
         layers = {
             "总造价预测模型": ["total_pso_svr", "unit_gbt"],
             "分部/分项工程模型": ["section_xgb", "subsection_xgb", "item_xgb"],
-            "清单项目模型": ["indicator_rf", "boq_apriori", "boq_lr"]
+            "清单项目模型": ["indicator_rf", "boq_xgb", "boq_lr_v2", "boq_apriori", "boq_lr"]
         }
         result = {}
         all_models = {m["id"]: m for m in self.list_models()}
@@ -939,54 +1122,81 @@ class RealModelFactory:
             result[layer_name] = [all_models[mid] for mid in mids if mid in all_models]
         return result
 
-    def train_all(self, df: pd.DataFrame) -> Dict:
-        """训练所有模型"""
+    def train_all(self, df: pd.DataFrame, boq_df: pd.DataFrame = None) -> Dict:
+        """训练所有模型
+
+        Args:
+            df: 项目级训练数据（L1/L2模型使用）
+            boq_df: BOQ清单项数据（L3 BOQ模型使用），从DuckDB加载
+        """
         results = {}
-        target_map = {
+        # L1/L2 项目级模型
+        project_target_map = {
             "total_pso_svr": "单方造价",
             "unit_gbt": "单方造价",
             "section_xgb": "单方造价",
             "subsection_xgb": "单方造价",
             "item_xgb": "单方造价",
             "indicator_rf": "单方造价",
-            "boq_apriori": "清单组成",
-            "boq_lr": "混凝土单方耗量",
         }
-        for mid, target in target_map.items():
+        for mid, target in project_target_map.items():
             model = self._models.get(mid)
             if model is None:
                 continue
-            # 混凝土单方耗量字段可能不存在，跳过或用估算
-            if target == "混凝土单方耗量" and target not in df.columns:
-                # 用单方造价 × 0.0001 作为代理目标（避免训练失败）
-                df = df.copy()
-                df["混凝土单方耗量"] = pd.to_numeric(df.get("单方造价", 0), errors="coerce") * 0.0001
             try:
                 results[mid] = model.train(df, target, self.models_dir)
             except Exception as e:
                 results[mid] = {"success": False, "error": str(e)}
+
+        # L3 BOQ item级模型（需要boq_df）
+        if boq_df is not None and len(boq_df) > 0:
+            for mid in self.BOQ_MODEL_IDS:
+                model = self._models.get(mid)
+                if model is None:
+                    continue
+                try:
+                    results[mid] = model.train(boq_df, "comp_unit_price", self.models_dir)
+                except Exception as e:
+                    results[mid] = {"success": False, "error": str(e)}
+        else:
+            for mid in self.BOQ_MODEL_IDS:
+                results[mid] = {"success": False, "error": "无BOQ清单项数据（需DuckDB中有boq_items表）"}
+
+        # 旧模型：boq_apriori无需训练，boq_lr用项目级数据
+        apriori = self._models.get("boq_apriori")
+        if apriori:
+            results["boq_apriori"] = apriori.train(df, "清单组成", self.models_dir)
+        boq_lr = self._models.get("boq_lr")
+        if boq_lr:
+            if "混凝土单方耗量" not in df.columns:
+                df = df.copy()
+                df["混凝土单方耗量"] = pd.to_numeric(df.get("单方造价", 0), errors="coerce") * 0.0001
+            try:
+                results["boq_lr"] = boq_lr.train(df, "混凝土单方耗量", self.models_dir)
+            except Exception as e:
+                results["boq_lr"] = {"success": False, "error": str(e)}
+
         return results
 
-    def train_one(self, model_id: str, df: pd.DataFrame) -> Dict:
+    def train_one(self, model_id: str, df: pd.DataFrame, boq_df: pd.DataFrame = None) -> Dict:
         """训练单个模型"""
         model = self._models.get(model_id)
         if model is None:
             return {"success": False, "error": f"模型 {model_id} 不存在"}
-        target_map = {
-            "total_pso_svr": "单方造价",
-            "unit_gbt": "单方造价",
-            "section_xgb": "单方造价",
-            "subsection_xgb": "单方造价",
-            "item_xgb": "单方造价",
-            "indicator_rf": "单方造价",
-            "boq_apriori": "清单组成",
-            "boq_lr": "混凝土单方耗量",
-        }
-        target = target_map.get(model_id, "单方造价")
-        if target == "混凝土单方耗量" and target not in df.columns:
-            df = df.copy()
-            df["混凝土单方耗量"] = pd.to_numeric(df.get("单方造价", 0), errors="coerce") * 0.0001
-        return model.train(df, target, self.models_dir)
+        # BOQ item级模型
+        if model_id in self.BOQ_MODEL_IDS:
+            if boq_df is None or len(boq_df) == 0:
+                return {"success": False, "error": "BOQ模型需要清单项数据（boq_df）"}
+            return model.train(boq_df, "comp_unit_price", self.models_dir)
+        # 旧模型
+        if model_id == "boq_apriori":
+            return model.train(df, "清单组成", self.models_dir)
+        if model_id == "boq_lr":
+            if "混凝土单方耗量" not in df.columns:
+                df = df.copy()
+                df["混凝土单方耗量"] = pd.to_numeric(df.get("单方造价", 0), errors="coerce") * 0.0001
+            return model.train(df, "混凝土单方耗量", self.models_dir)
+        return model.train(df, "单方造价", self.models_dir)
 
 
 def predict_with_real_models(
