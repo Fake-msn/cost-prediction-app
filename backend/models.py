@@ -442,8 +442,8 @@ class ModelFactory:
                 "subsection_xgb": SubsectionCostXGBoostModel(),
                 "item_xgb": ItemCostXGBoostModel(),
                 "indicator_rf": IndicatorSystemRFModel(),
-                "boq_apriori": BOQCompositionAprioriModel(),
-                "boq_lr": ConcreteLRModel(),
+                "boq_xgb": TotalCostPSOSVRModel(),  # placeholder, real model in ml_models.py
+                "boq_lr_v2": UnitCostGBTModel(),  # placeholder, real model in ml_models.py
             }
 
     @classmethod
@@ -471,7 +471,7 @@ class ModelFactory:
         layers = {
             "总造价预测模型": ["total_pso_svr", "unit_gbt"],
             "分部/分项工程模型": ["section_xgb", "subsection_xgb", "item_xgb"],
-            "清单项目模型": ["indicator_rf", "boq_apriori", "boq_lr"]
+            "清单项目模型": ["indicator_rf", "boq_xgb", "boq_lr_v2"]
         }
         result = {}
         for layer_name, model_ids in layers.items():

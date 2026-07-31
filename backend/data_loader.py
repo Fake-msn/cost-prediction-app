@@ -10,6 +10,7 @@ import random
 from typing import Dict, List, Optional
 from datetime import datetime, date
 import pandas as pd
+import numpy as np
 
 # DuckDB 可选导入
 try:
@@ -281,6 +282,126 @@ class DataLoader:
             print(f"[DataLoader] 从DuckDB加载 {len(df)} 条BOQ清单项 (全量，含推导division)")
         return df
 
+    def load_boq_aggregations(self, db_path=None):
+        """从DuckDB聚合BOQ数据，生成项目级/全局 trade 比例统计
+
+        由于 boq_items.project_id (hex格式) 与 project_meta.project_id (P00xx格式)
+        无法直接JOIN，因此同时返回:
+          - per-project 聚合 (df, 按project_id分组)
+          - 全局平均比例 (global_ratios dict)
+        返回 dict: {'df': DataFrame, 'global_ratios': dict} 或 None
+        """
+        import duckdb as _duckdb
+        if db_path is None:
+            db_path = self.db_path
+        if not os.path.exists(db_path):
+            return None
+
+        conn = _duckdb.connect(db_path, read_only=True)
+        try:
+            # 检查boq_items表是否存在
+            tables = conn.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
+            ).fetchall()
+            if 'boq_items' not in [t[0] for t in tables]:
+                return None
+
+            # 按项目聚合 trade 费用
+            # 映射规则:
+            #   建筑/土建 trade → arch_cost (建筑工程费)
+            #   装饰 trade → deco_cost (装饰工程费)
+            #   装修 trade → inst_cost (安装工程费, 装修通常指机电安装)
+            df = conn.execute("""
+                SELECT 
+                    bi.project_id,
+                    -- Trade costs
+                    SUM(CASE WHEN bi.trade LIKE '%建筑%' OR bi.trade LIKE '%土建%'
+                             THEN bi.comp_unit_price * bi.quantity ELSE 0 END) as arch_cost,
+                    SUM(CASE WHEN bi.trade = '装饰' OR bi.trade LIKE '%装饰%'
+                             THEN bi.comp_unit_price * bi.quantity ELSE 0 END) as deco_cost,
+                    SUM(CASE WHEN bi.trade = '装修' OR bi.trade LIKE '%安装%'
+                             THEN bi.comp_unit_price * bi.quantity ELSE 0 END) as inst_cost,
+                    -- Division costs
+                    SUM(CASE WHEN bi.division LIKE '%基础%'
+                             THEN bi.comp_unit_price * bi.quantity ELSE 0 END) as foundation_cost,
+                    SUM(CASE WHEN bi.division LIKE '%主体%' OR bi.division LIKE '%结构%'
+                             THEN bi.comp_unit_price * bi.quantity ELSE 0 END) as structure_cost,
+                    SUM(CASE WHEN bi.division LIKE '%屋面%' OR bi.division LIKE '%楼地面%'
+                             THEN bi.comp_unit_price * bi.quantity ELSE 0 END) as roof_cost,
+                    SUM(CASE WHEN bi.division LIKE '%外墙%'
+                             THEN bi.comp_unit_price * bi.quantity ELSE 0 END) as wall_cost,
+                    -- Material consumption
+                    SUM(CASE WHEN bi.item_name LIKE '%混凝土%' OR bi.item_name LIKE '%砼%'
+                             THEN bi.quantity ELSE 0 END) as concrete_total,
+                    SUM(CASE WHEN bi.item_name LIKE '%钢筋%' OR bi.item_name LIKE '%螺纹钢%'
+                             THEN bi.quantity ELSE 0 END) as rebar_total,
+                    SUM(CASE WHEN bi.item_name LIKE '%砌块%' OR bi.item_name LIKE '%砖%'
+                             THEN bi.quantity ELSE 0 END) as block_total,
+                    -- Stats
+                    COUNT(*) as item_count,
+                    COUNT(DISTINCT bi.division) as division_count,
+                    SUM(bi.comp_unit_price * bi.quantity) as total_boq_cost
+                FROM boq_items bi
+                WHERE bi.is_active = 1 AND bi.comp_unit_price > 0
+                GROUP BY bi.project_id
+            """).fetchdf()
+
+            if df is None or len(df) == 0:
+                return None
+
+            # 计算全局平均比例
+            total_arch = df['arch_cost'].sum()
+            total_deco = df['deco_cost'].sum()
+            total_inst = df['inst_cost'].sum()
+            grand_total = total_arch + total_deco + total_inst
+
+            if grand_total > 0:
+                # 如果安装工程费为0（无装修/安装trade），用装饰的一半估算
+                if total_inst == 0 and total_deco > 0:
+                    total_inst = total_deco * 0.5
+                    total_deco = total_deco * 0.5
+                    grand_total = total_arch + total_deco + total_inst
+
+                global_ratios = {
+                    'arch_ratio': total_arch / grand_total,
+                    'deco_ratio': total_deco / grand_total,
+                    'inst_ratio': total_inst / grand_total,
+                }
+
+                # 合理性检查: 建筑工程费占比不应超过80%，否则用行业基准平滑
+                if global_ratios['arch_ratio'] > 0.80:
+                    print(f"[load_boq_aggregations] BOQ建筑占比异常高({global_ratios['arch_ratio']:.2f})，使用行业基准平滑")
+                    # 用行业基准(0.60/0.20/0.20)和BOQ比例加权平均
+                    global_ratios = {
+                        'arch_ratio': 0.5 * global_ratios['arch_ratio'] + 0.5 * 0.60,
+                        'deco_ratio': 0.5 * global_ratios['deco_ratio'] + 0.5 * 0.20,
+                        'inst_ratio': 0.5 * global_ratios['inst_ratio'] + 0.5 * 0.20,
+                    }
+                    # 重新归一化
+                    s = sum(global_ratios.values())
+                    global_ratios = {k: v/s for k, v in global_ratios.items()}
+
+                # 最终归一化确保比例之和=1.0（BOQ仅包含部分费用类别）
+                s = sum(global_ratios.values())
+                if s > 0 and abs(s - 1.0) > 0.01:
+                    global_ratios = {k: v/s for k, v in global_ratios.items()}
+                    print(f"[load_boq_aggregations] 归一化后: arch={global_ratios['arch_ratio']:.3f}, deco={global_ratios['deco_ratio']:.3f}, inst={global_ratios['inst_ratio']:.3f}")
+            else:
+                # 回退到行业基准
+                global_ratios = {'arch_ratio': 0.72, 'deco_ratio': 0.14, 'inst_ratio': 0.14}
+
+            print(f"[load_boq_aggregations] {len(df)} 个BOQ项目, "
+                  f"global_ratios: arch={global_ratios['arch_ratio']:.3f}, "
+                  f"deco={global_ratios['deco_ratio']:.3f}, inst={global_ratios['inst_ratio']:.3f}")
+
+            return {'df': df, 'global_ratios': global_ratios}
+
+        except Exception as e:
+            print(f"[load_boq_aggregations] 失败: {e}")
+            return None
+        finally:
+            conn.close()
+
     def get_boq_items(self, project_id: str = None) -> List[Dict]:
         """从 DuckDB 获取清单条目"""
         if not HAS_DUCKDB or not os.path.exists(self.db_path):
@@ -422,6 +543,50 @@ class DataLoader:
 
         try:
             merged = pd.concat(result_dfs, ignore_index=True)
+
+            # 5. 为所有行派生 建筑工程费/装饰工程费/安装工程费（section_xgb 关键目标字段）
+            # Excel行有基础/主体/屋面/外墙但没有建筑/装饰/安装，需补充
+            if '项目总造价' in merged.columns:
+                tc = pd.to_numeric(merged['项目总造价'], errors='coerce').fillna(0)
+                boq_agg = self.load_boq_aggregations()
+                arch_r = boq_agg['global_ratios']['arch_ratio'] if boq_agg else 0.72
+                deco_r = boq_agg['global_ratios']['deco_ratio'] if boq_agg else 0.14
+                inst_r = boq_agg['global_ratios']['inst_ratio'] if boq_agg else 0.14
+
+                # 建筑工程费: 优先用已有字段(基础+主体+屋面+外墙)加和，否则用BOQ比例
+                if '建筑工程费' not in merged.columns:
+                    merged['建筑工程费'] = np.nan
+                mask_arch_na = merged['建筑工程费'].isna() | (merged['建筑工程费'] == 0)
+                if '基础工程费' in merged.columns:
+                    computed_arch = (
+                        pd.to_numeric(merged.get('基础工程费', 0), errors='coerce').fillna(0) +
+                        pd.to_numeric(merged.get('主体结构费', 0), errors='coerce').fillna(0) +
+                        pd.to_numeric(merged.get('屋面工程费', 0), errors='coerce').fillna(0) +
+                        pd.to_numeric(merged.get('外墙工程费', 0), errors='coerce').fillna(0)
+                    )
+                    # 用加和结果填充NA行，仅当加和>0时
+                    fill_mask = mask_arch_na & (computed_arch > 0)
+                    merged.loc[fill_mask, '建筑工程费'] = computed_arch[fill_mask]
+                    # 其余NA行用BOQ比例
+                    still_na = merged['建筑工程费'].isna() | (merged['建筑工程费'] == 0)
+                    merged.loc[still_na, '建筑工程费'] = tc[still_na] * arch_r
+                else:
+                    merged.loc[mask_arch_na, '建筑工程费'] = tc[mask_arch_na] * arch_r
+
+                # 装饰工程费: NA行用BOQ比例填充
+                if '装饰工程费' not in merged.columns:
+                    merged['装饰工程费'] = np.nan
+                mask_deco_na = merged['装饰工程费'].isna() | (merged['装饰工程费'] == 0)
+                merged.loc[mask_deco_na, '装饰工程费'] = tc[mask_deco_na] * deco_r
+
+                # 安装工程费: NA行用BOQ比例填充
+                if '安装工程费' not in merged.columns:
+                    merged['安装工程费'] = np.nan
+                mask_inst_na = merged['安装工程费'].isna() | (merged['安装工程费'] == 0)
+                merged.loc[mask_inst_na, '安装工程费'] = tc[mask_inst_na] * inst_r
+
+                print(f"[to_dataframe] 已派生 建筑工程费/装饰工程费/安装工程费 (BOQ ratios: {arch_r:.3f}/{deco_r:.3f}/{inst_r:.3f})")
+
             print(f"[to_dataframe] 合并后总计 {len(merged)} 条记录, {len(merged.columns)} 列")
             return merged
         except Exception as e:
@@ -490,6 +655,45 @@ class DataLoader:
                 df['混凝土总用量'] = area * 0.45
                 df['钢筋总用量'] = area * 0.055
                 df['砌块总用量'] = area * 0.25
+
+            # 使用BOQ聚合数据派生 建筑工程费/装饰工程费/安装工程费
+            # 这是 section_xgb 模型的关键目标字段
+            boq_agg = self.load_boq_aggregations()
+            if boq_agg is not None:
+                ratios = boq_agg['global_ratios']
+                tc = df['项目总造价'].fillna(0)
+                # 建筑工程费 = 基础 + 主体 + 屋面 + 外墙 (已有字段直接加和)
+                if '基础工程费' in df.columns:
+                    df['建筑工程费'] = (
+                        pd.to_numeric(df.get('基础工程费', 0), errors='coerce').fillna(0) +
+                        pd.to_numeric(df.get('主体结构费', 0), errors='coerce').fillna(0) +
+                        pd.to_numeric(df.get('屋面工程费', 0), errors='coerce').fillna(0) +
+                        pd.to_numeric(df.get('外墙工程费', 0), errors='coerce').fillna(0)
+                    )
+                else:
+                    df['建筑工程费'] = tc * ratios['arch_ratio']
+                # 装饰工程费/安装工程费: 用BOQ比例从总造价派生
+                df['装饰工程费'] = tc * ratios['deco_ratio']
+                df['安装工程费'] = tc * ratios['inst_ratio']
+                print(f"[_load_duckdb_dataframe] 用BOQ比例派生 建筑/装饰/安装 工程费, "
+                      f"ratios: arch={ratios['arch_ratio']:.3f}, deco={ratios['deco_ratio']:.3f}, inst={ratios['inst_ratio']:.3f}")
+            else:
+                # 无BOQ数据，使用行业基准比例
+                tc = df['项目总造价'].fillna(0)
+                if '建筑工程费' not in df.columns:
+                    if '基础工程费' in df.columns:
+                        df['建筑工程费'] = (
+                            pd.to_numeric(df.get('基础工程费', 0), errors='coerce').fillna(0) +
+                            pd.to_numeric(df.get('主体结构费', 0), errors='coerce').fillna(0) +
+                            pd.to_numeric(df.get('屋面工程费', 0), errors='coerce').fillna(0) +
+                            pd.to_numeric(df.get('外墙工程费', 0), errors='coerce').fillna(0)
+                        )
+                    else:
+                        df['建筑工程费'] = tc * 0.72
+                if '装饰工程费' not in df.columns:
+                    df['装饰工程费'] = tc * 0.14
+                if '安装工程费' not in df.columns:
+                    df['安装工程费'] = tc * 0.14
 
             return df
         finally:

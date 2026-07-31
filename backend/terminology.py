@@ -180,87 +180,90 @@ DECORATION_COEFFICIENT: Dict[str, float] = {
     "豪华装修": 1.60
 }
 
-# ===== 模型清单（参考图片设计，通用适配 8 种建筑类型）=====
+# ===== 模型清单（三层多维度融合架构，通用适配 8 种建筑类型）=====
 # 建筑类型：学校/医院/办公楼/住宅/工业建筑/商业建筑/基础设施/公共建筑
 MODELS_REGISTRY: List[Dict] = [
+    # ── L1 总造价层：双模型加权融合 ──
     {
         "id": "total_pso_svr",
         "name": "建筑安装_总造价_[通用]_[PSO-SVR]",
         "version": "V1.0",
         "algorithm": "PSO-SVR",
-        "accuracy": 92,
+        "accuracy": 86.9,
         "layer": "总造价预测模型",
-        "description": "基于PSO优化SVR的多类型建筑总造价预测模型，支持学校/医院/办公楼/住宅/工业/商业/基础设施/公共建筑",
+        "description": "基于PSO优化SVR的多类型建筑单方造价预测模型（L1主模型），支持学校/医院/办公楼/住宅/工业/商业/基础设施/公共建筑",
         "supported_types": ["学校", "医院", "办公楼", "住宅", "工业建筑", "商业建筑", "基础设施", "公共建筑"]
     },
     {
         "id": "unit_gbt",
-        "name": "单位工程_(总造价/单方造价)_[通用]_[Gradient Boosting Tree]",
+        "name": "单位工程_(单方造价)_[通用]_[Gradient Boosting Tree]",
         "version": "V1.0",
         "algorithm": "Gradient Boosting Tree",
-        "accuracy": 90,
+        "accuracy": 74.6,
         "layer": "总造价预测模型",
-        "description": "基于梯度提升树的多类型单位工程造价预测模型",
+        "description": "基于梯度提升树的多类型单方造价预测模型（L1辅助模型），与PSO-SVR加权融合",
         "supported_types": ["学校", "医院", "办公楼", "住宅", "工业建筑", "商业建筑", "基础设施", "公共建筑"]
     },
+    # ── L2 专业/分部/材料层：三维结构分解 ──
     {
         "id": "section_xgb",
-        "name": "分部工程_单方造价_[通用]_[XGBoost]",
+        "name": "专业占比_建筑/装饰/安装_[通用]_[MultiOutput XGBoost]",
         "version": "V1.0",
-        "algorithm": "XGBoost",
-        "accuracy": 91,
+        "algorithm": "MultiOutput XGBoost",
+        "accuracy": 51.6,
         "layer": "分部/分项工程模型",
-        "description": "基于XGBoost的多类型分部工程单方造价预测模型",
+        "description": "基于MultiOutput XGBoost的专业造价占比预测（建筑/装饰/安装），实现L2专业维度分解",
         "supported_types": ["学校", "医院", "办公楼", "住宅", "工业建筑", "商业建筑", "基础设施", "公共建筑"]
     },
     {
         "id": "subsection_xgb",
-        "name": "子分部工程_单方造价_[通用]_[XGBoost]",
+        "name": "分部占比_基础/主体/屋面/外墙_[通用]_[MultiOutput XGBoost]",
         "version": "V1.0",
-        "algorithm": "XGBoost",
-        "accuracy": 89,
+        "algorithm": "MultiOutput XGBoost",
+        "accuracy": 36.7,
         "layer": "分部/分项工程模型",
-        "description": "基于XGBoost的多类型子分部工程单方造价预测模型",
+        "description": "基于MultiOutput XGBoost的分部造价占比预测（基础/主体/屋面/外墙），实现L2分部维度分解",
         "supported_types": ["学校", "医院", "办公楼", "住宅", "工业建筑", "商业建筑", "基础设施", "公共建筑"]
     },
     {
         "id": "item_xgb",
-        "name": "分项工程_单方造价_[通用]_[XGBoost]",
+        "name": "材料耗量_混凝土/钢筋/砌块_[通用]_[MultiOutput XGBoost]",
         "version": "V1.0",
-        "algorithm": "XGBoost",
-        "accuracy": 87,
+        "algorithm": "MultiOutput XGBoost",
+        "accuracy": 39.4,
         "layer": "分部/分项工程模型",
-        "description": "基于XGBoost的多类型分项工程单方造价预测模型",
+        "description": "基于MultiOutput XGBoost的材料的单方耗量预测（混凝土/钢筋/砌块），实现L2材料维度分解",
         "supported_types": ["学校", "医院", "办公楼", "住宅", "工业建筑", "商业建筑", "基础设施", "公共建筑"]
     },
+    # ── L3 清单/指标层：微观预测 ──
     {
         "id": "indicator_rf",
-        "name": "指标体系(无清单)_[通用]_[Random Forest]",
+        "name": "指标体系_人工费/基础/主体占比_[通用]_[MultiOutput RF]",
         "version": "V1.0",
-        "algorithm": "Random Forest",
-        "accuracy": 88,
+        "algorithm": "MultiOutput Random Forest",
+        "accuracy": 60.3,
         "layer": "清单项目模型",
-        "description": "基于随机森林的多类型建筑指标体系预测模型",
+        "description": "基于MultiOutput Random Forest的经济技术指标预测（人工费/基础/主体占比），L3指标体系",
         "supported_types": ["学校", "医院", "办公楼", "住宅", "工业建筑", "商业建筑", "基础设施", "公共建筑"]
     },
     {
-        "id": "boq_apriori",
-        "name": "清单项目_清单组成_[通用]_[Apriori/FPGrowth]",
+        "id": "boq_xgb",
+        "name": "清单项目_XGBoost_[通用]_[XGBoost]",
         "version": "V1.0",
-        "algorithm": "Apriori/FPGrowth",
-        "accuracy": 85,
+        "algorithm": "XGBoost",
+        "accuracy": 73.7,
         "layer": "清单项目模型",
-        "description": "基于关联规则挖掘的多类型清单项目组成分析模型",
+        "description": "基于XGBoost的清单项目综合单价预测模型（item级），L3 BOQ主模型",
         "supported_types": ["学校", "医院", "办公楼", "住宅", "工业建筑", "商业建筑", "基础设施", "公共建筑"]
     },
     {
-        "id": "boq_lr",
-        "name": "清单项目_单方耗量_(混凝土)_[通用]_[Linear Regression]",
+        "id": "boq_lr_v2",
+        "name": "清单项目_LR_[通用]_[Linear Regression]",
         "version": "V1.0",
         "algorithm": "Linear Regression",
-        "accuracy": 82,
+        "accuracy": 68.3,
         "layer": "清单项目模型",
-        "description": "基于线性回归的多类型清单项目单方耗量预测模型",
+        "description": "基于线性回归的清单项目综合单价预测模型（item级，可解释对照），L3 BOQ辅助模型",
         "supported_types": ["学校", "医院", "办公楼", "住宅", "工业建筑", "商业建筑", "基础设施", "公共建筑"]
     }
 ]

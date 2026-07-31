@@ -223,7 +223,20 @@ async def list_models():
 
 @app.get("/api/models/all")
 async def list_all_models():
-    return MODELS_REGISTRY
+    # Merge static registry with actual trained model data
+    trained = {m["id"]: m for m in model_factory.list_models()}
+    result = []
+    for entry in MODELS_REGISTRY:
+        mid = entry.get("id", "")
+        merged = dict(entry)
+        if mid in trained:
+            t = trained[mid]
+            merged["accuracy"] = t.get("accuracy", entry.get("accuracy", 0))
+            merged["is_trained"] = t.get("is_trained", False)
+            merged["train_samples"] = t.get("train_samples", 0)
+            merged["trained_at"] = t.get("trained_at", "")
+        result.append(merged)
+    return result
 
 
 @app.get("/api/stage/{stage}/params")

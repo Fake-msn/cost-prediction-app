@@ -12,7 +12,7 @@ let projectData = {
     floors: 1,
     location: '华东',
     build_year: 2026,
-    decoration_level: '普通装修',
+    decoration_level: '一般装修',
     stage: 'estimation',
     selected_models: []
 };
@@ -232,7 +232,7 @@ function resetProject() {
         floors: 1,
         location: '华东',
         build_year: 2026,
-        decoration_level: '普通装修',
+        decoration_level: '一般装修',
         stage: 'estimation',
         selected_models: []
     };
@@ -313,11 +313,18 @@ function renderStep1() {
                 </div>
                 <div>
                     <label class="required">建造年份</label>
-                    <input type="number" id="f-build_year" value="${projectData.build_year}" min="2020" max="2030">
+                    <input type="number" id="f-build_year" value="${projectData.build_year}" min="1950" max="2030">
                 </div>
                 <div>
                     <label class="required">总建筑面积 (m²) <span class="required"></span></label>
-                    <input type="number" id="f-total_area" value="${projectData.total_area}" placeholder="请输入建筑面积">
+                    <input type="number" id="f-total_area" value="${projectData.total_area}" min="100" max="10000000" placeholder="请输入建筑面积">
+                </div>
+                <div>
+                    <label class="required">装修标准</label>
+                    <select id="f-decoration_level">
+                        ${['精装修','一般装修','简装修','毛坯']
+                          .map(d => `<option ${projectData.decoration_level === d ? 'selected' : ''}>${d}</option>`).join('')}
+                    </select>
                 </div>
                 <div>
                     <label class="required">楼层数</label>
@@ -356,10 +363,10 @@ function renderStep1() {
 }
 
 function bindStep1Events() {
-    ['project_name','project_type','structure_type','total_area','floors','location','build_year']
+    ['project_name','project_type','structure_type','total_area','floors','location','build_year','decoration_level']
         .forEach(k => {
             const el = document.getElementById(`f-${k}`);
-            if (el) el.addEventListener('input', e => {
+            if (el) el.addEventListener(k === 'decoration_level' ? 'change' : 'input', e => {
                 projectData[k] = k === 'total_area' || k === 'floors' || k === 'build_year'
                     ? parseFloat(e.target.value) || 0 : e.target.value;
             });
@@ -464,8 +471,8 @@ function renderStep3() {
 function renderParamFields(tab) {
     const fieldMap = {
         basic: [
-            { id: 'decoration', label: '装修标准', type: 'select', options: ['简单装修', '普通装修', '精装修', '豪华装修'] },
-            { id: 'decoration_inside', label: '室内装修', type: 'select', options: ['简单装修', '普通装修', '精装修', '豪华装修'] },
+            { id: 'decoration', label: '装修标准', type: 'select', options: ['精装修', '一般装修', '简装修', '毛坯'] },
+            { id: 'decoration_inside', label: '室内装修', type: 'select', options: ['精装修', '一般装修', '简装修', '毛坯'] },
             { id: 'basement', label: '地下室面积', type: 'number', unit: 'm²' },
             { id: 'building_height', label: '建筑高度', type: 'number', unit: 'm' },
         ],
@@ -495,11 +502,11 @@ function renderParamFields(tab) {
                 <div>
                     <label>${f.label}</label>
                     ${f.type === 'select' ? `
-                        <select>
+                        <select id="param-${f.id}">
                             ${f.options.map(o => `<option>${o}</option>`).join('')}
                         </select>
                     ` : `
-                        <input type="number" placeholder="${f.placeholder || ''}">
+                        <input type="number" id="param-${f.id}" placeholder="${f.placeholder || ''}">
                     `}
                 </div>
             `).join('')}
@@ -546,7 +553,7 @@ async function renderStep4() {
     const defaults = {
         estimation: ['total_pso_svr', 'section_xgb', 'indicator_rf'],
         preliminary: ['total_pso_svr', 'unit_gbt', 'section_xgb', 'item_xgb', 'indicator_rf'],
-        budget: ['total_pso_svr', 'unit_gbt', 'section_xgb', 'subsection_xgb', 'item_xgb', 'indicator_rf', 'boq_apriori', 'boq_lr']
+        budget: ['total_pso_svr', 'unit_gbt', 'section_xgb', 'subsection_xgb', 'item_xgb', 'indicator_rf', 'boq_xgb', 'boq_lr_v2']
     };
     projectData.selected_models = [...(defaults[projectData.stage] || defaults.estimation)];
 
@@ -712,7 +719,7 @@ function renderStep5() {
         </div>
 
         <div class="result-content" id="result-content">
-            ${renderCostComposition(r.individual_predictions)}
+            ${renderIndicatorTab(r)}
         </div>
     `;
     document.getElementById('step-content').innerHTML = html;
@@ -778,15 +785,115 @@ function bindResultTabs(r) {
             document.querySelectorAll('.result-tab').forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
             const tabId = tab.dataset.tab;
+            const contentEl = document.getElementById('result-content');
             if (tabId === 'indicator') {
-                document.getElementById('result-content').innerHTML = renderCostComposition(r.individual_predictions);
+                contentEl.innerHTML = renderIndicatorTab(r);
             } else if (tabId === 'unit') {
-                document.getElementById('result-content').innerHTML = renderUnitProjects(r.individual_predictions);
+                contentEl.innerHTML = renderUnitTab(r);
             } else if (tabId === 'boq') {
-                document.getElementById('result-content').innerHTML = renderBOQ(r.individual_predictions);
+                contentEl.innerHTML = renderBOQTab(r);
             }
         });
     });
+}
+
+function renderIndicatorTab(r) {
+    // New: use top-level indicators field
+    const indicators = r.indicators || {};
+    if (Object.keys(indicators).length > 0) {
+        let html = '<div class="composition-list">';
+        html += '<h4 style="margin-bottom:12px;">经济技术指标</h4>';
+        for (const [key, value] of Object.entries(indicators)) {
+            const pct = (value * 100).toFixed(1);
+            html += `
+                <div class="composition-row">
+                    <div class="composition-toggle">·</div>
+                    <div class="composition-name">${key}</div>
+                    <div class="composition-bar">
+                        <div class="composition-bar-fill" style="width:${pct}%"></div>
+                    </div>
+                    <div class="composition-ratio">${pct}%</div>
+                </div>
+            `;
+        }
+        html += '</div>';
+        return html;
+    }
+    // Fallback: old composition from individual_predictions
+    return renderCostComposition(r.individual_predictions);
+}
+
+function renderUnitTab(r) {
+    // New: use top-level trade_composition field
+    const trades = r.trade_composition || {};
+    if (Object.keys(trades).length > 0) {
+        let html = '<div class="composition-list">';
+        html += '<h4 style="margin-bottom:12px;">专业造价构成</h4>';
+        for (const [key, value] of Object.entries(trades)) {
+            const ratioPct = (value.ratio * 100).toFixed(1);
+            const amount = (value.amount / 10000).toFixed(0);
+            html += `
+                <div class="composition-row parent">
+                    <div class="composition-toggle">·</div>
+                    <div class="composition-name">${key}</div>
+                    <div class="composition-bar">
+                        <div class="composition-bar-fill" style="width:${ratioPct}%"></div>
+                    </div>
+                    <div class="composition-ratio">${ratioPct}%</div>
+                    <div class="composition-amount">${amount}万元</div>
+                </div>
+            `;
+        }
+        html += '</div>';
+        return html;
+    }
+    // Fallback: old unit_projects from individual_predictions
+    return renderUnitProjects(r.individual_predictions);
+}
+
+function renderBOQTab(r) {
+    const materials = r.material_consumption || {};
+    const divisions = r.division_composition || {};
+    const hasNewData = Object.keys(materials).length > 0 || Object.keys(divisions).length > 0;
+    if (hasNewData) {
+        let html = '';
+        if (Object.keys(materials).length > 0) {
+            html += '<h4 style="margin-bottom:12px;">主要材料估算</h4>';
+            html += '<div class="composition-list">';
+            for (const [key, value] of Object.entries(materials)) {
+                html += `
+                    <div class="composition-row">
+                        <div class="composition-toggle">·</div>
+                        <div class="composition-name">${key}</div>
+                        <div class="composition-ratio">${value.per_m2} ${value.unit}</div>
+                        <div class="composition-amount">总计 ${value.total.toLocaleString()}</div>
+                    </div>
+                `;
+            }
+            html += '</div>';
+        }
+        if (Object.keys(divisions).length > 0) {
+            html += '<h4 style="margin:16px 0 12px;">分部造价占比</h4>';
+            html += '<div class="composition-list">';
+            for (const [key, value] of Object.entries(divisions)) {
+                const pct = (value * 100).toFixed(1);
+                html += `
+                    <div class="composition-row">
+                        <div class="composition-toggle">·</div>
+                        <div class="composition-name">${key}</div>
+                        <div class="composition-bar">
+                            <div class="composition-bar-fill" style="width:${pct}%"></div>
+                        </div>
+                        <div class="composition-ratio">${pct}%</div>
+                    </div>
+                `;
+            }
+            html += '</div>';
+        }
+        return html;
+    }
+    // Fallback: old item_xgb from individual_predictions
+    return renderBOQ(r.individual_predictions);
 }
 
 function renderUnitProjects(predictions) {
@@ -1010,7 +1117,7 @@ function autoFillWizardForm(features) {
         'floor_count': 'f-floors',
         'location': 'f-location',
         'build_year': 'f-build_year',
-        'decoration_standard': 'f-decoration',
+        'decoration_standard': 'f-decoration_level',
         'project_name': 'f-project_name',
     };
 
