@@ -526,6 +526,8 @@ function renderParamFieldsFromConfig(params, containerId) {
     });
     html += '</div>';
     container.innerHTML = html;
+    // 绑定置信度实时预览事件
+    setTimeout(bindConfidencePreviewListeners, 50);
 }
 
 function switchParamTab(tabName) {
@@ -546,6 +548,58 @@ function collectStep3Params() {
             projectData[key] = el.value || '';
         }
     });
+}
+
+// ── 置信度实时预览 ──
+let confidencePreviewCache = {};
+let confidencePreviewTimer = null;
+
+async function fetchConfidencePreview() {
+    const params = new URLSearchParams();
+    const fields = ['foundation_type', 'seismic_grade', 'soil_condition',
+                    'decoration_level', 'exterior_wall', 'hvac',
+                    'concrete_grade', 'steel_grade'];
+    fields.forEach(key => {
+        const el = document.querySelector(`[data-param-key="${key}"]`);
+        if (el && el.value) params.append(key, el.value);
+    });
+    params.append('model_ids', 'subsection_xgb,section_xgb,item_xgb');
+    try {
+        const resp = await fetch(`/api/confidence/preview?${params.toString()}`);
+        const data = await resp.json();
+        confidencePreviewCache = data.models || {};
+        updateStep4ConfidenceDisplay();
+    } catch (e) {
+        confidencePreviewCache = {};
+    }
+}
+
+function debounceConfidencePreview() {
+    if (confidencePreviewTimer) clearTimeout(confidencePreviewTimer);
+    confidencePreviewTimer = setTimeout(fetchConfidencePreview, 400);
+}
+
+function bindConfidencePreviewListeners() {
+    document.querySelectorAll('[data-param-key]').forEach(el => {
+        el.removeEventListener('change', debounceConfidencePreview);
+        el.addEventListener('change', debounceConfidencePreview);
+    });
+}
+
+function updateStep4ConfidenceDisplay() {
+    for (const [mid, cp] of Object.entries(confidencePreviewCache)) {
+        const el = document.getElementById(`bonus-${mid}`);
+        if (!el) continue;
+        if (cp.current_bonus > 0) {
+            el.textContent = ` (+${cp.current_bonus}%)`;
+            el.style.color = '#2e7d32';
+        } else if (cp.max_potential_bonus > 0) {
+            el.textContent = ` (可达 +${cp.max_potential_bonus}%)`;
+            el.style.color = 'var(--text-mute)';
+        } else {
+            el.textContent = '';
+        }
+    }
 }
 
 async function renderStep4() {
@@ -638,7 +692,10 @@ function renderModelGroups(groups) {
                         </div>
                         <div class="model-tags">
                             <span class="model-tag">${m.algorithm}</span>
-                            <span class="model-accuracy ${m.accuracy >= 90 ? 'high' : m.accuracy >= 85 ? 'mid' : 'low'}">准确率 ${m.accuracy}%</span>
+                            <span class="model-accuracy ${m.accuracy >= 90 ? 'high' : m.accuracy >= 85 ? 'mid' : 'low'}">
+                                准确率 ${m.accuracy}%
+                                <span class="accuracy-potential" id="bonus-${m.id}"></span>
+                            </span>
                         </div>
                     </div>
                 `).join('')}
@@ -687,10 +744,14 @@ function renderStep5() {
     const total = r.fused_total_cost;
     const unitPrice = r.fused_unit_price;
     const accuracy = r.average_accuracy;
+    const confidence = r.confidence;
+    const accuracyDisplay = confidence?.overall?.total_bonus > 0
+        ? `${accuracy}% (含输入加成 +${confidence.overall.total_bonus}%)`
+        : `${accuracy}%`;
 
     const html = `
         <h2>预测结果</h2>
-        <p class="step-subtitle">预测精度 ${accuracy}% · 使用 ${r.model_count} 个模型</p>
+        <p class="step-subtitle">综合精度 ${accuracyDisplay} · 使用 ${r.model_count} 个模型</p>
 
         <div class="result-summary">
             <div>

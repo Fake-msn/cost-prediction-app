@@ -34,6 +34,8 @@ from sklearn.model_selection import train_test_split, cross_val_score, cross_val
 from sklearn.metrics import r2_score, mean_absolute_percentage_error
 import joblib
 
+from confidence import get_engine  # 动态置信度引擎
+
 try:
     from xgboost import XGBRegressor
     HAS_XGB = True
@@ -160,7 +162,7 @@ NUMERIC_FEATURES = [
 
 
 # 树模型专用：安全输入特征（建造前已知 + 设计阶段材料估算）
-TREE_CATEGORICAL = ["建筑类型", "结构类型", "所在地区", "装修标准"]
+TREE_CATEGORICAL = ["建筑类型", "结构类型", "所在地区", "装修标准", "基础类型"]
 TREE_NUMERIC = ["总建筑面积", "楼层数", "建造年份", "混凝土总用量", "钢筋总用量", "砌块总用量"]
 TREE_LOG1P_FEATURES = ["混凝土总用量", "钢筋总用量", "砌块总用量"]
 
@@ -379,7 +381,7 @@ def extract_tree_features(df: pd.DataFrame) -> pd.DataFrame:
     """提取树模型输入特征（安全特征 + log1p材料用量）"""
     feature_df = pd.DataFrame()
     for col in TREE_CATEGORICAL:
-        feature_df[col] = df[col].astype(str) if col in df.columns else "未知"
+        feature_df[col] = df[col].fillna("未知").astype(str) if col in df.columns else "未知"
     for col in TREE_NUMERIC:
         if col in df.columns:
             vals = pd.to_numeric(df[col], errors="coerce").fillna(0)
@@ -1931,6 +1933,8 @@ def predict_with_real_models(
     # ========== L1: 总造价预测 ==========
     l1_predictions = []
     individual_predictions = {}
+    engine = get_engine()  # 初始化置信度引擎
+    l1_assessments: Dict[str, Any] = {}
     for mid in ["total_pso_svr", "unit_gbt"]:
         if mid not in selected_set:
             continue
@@ -1942,7 +1946,9 @@ def predict_with_real_models(
             individual_predictions[mid] = pred
             val = pred.get("predicted_value", 0)
             if val > 0:
-                l1_predictions.append({"value": val, "weight": model.info.accuracy / 100})
+                assessment = engine.assess(mid, project, model.info.accuracy)
+                l1_predictions.append({"value": val, "weight": assessment.effective_accuracy / 100})
+                l1_assessments[mid] = assessment
         except Exception as e:
             individual_predictions[mid] = {"error": str(e), "model_id": mid}
 
@@ -1979,8 +1985,8 @@ def predict_with_real_models(
         result["fused_unit_price"] = round(fused_unit_price_adjusted, 2)
         result["fused_total_cost"] = round(fused_total, 2)
         result["average_accuracy"] = round(
-            sum(p["weight"] for p in l1_predictions) / len(l1_predictions) * 100, 1
-        )
+            sum(a.effective_accuracy for a in l1_assessments.values()) / len(l1_assessments), 1
+        ) if l1_assessments else 0.0
         result["model_count"] = len(l1_predictions)
     else:
         # 兜底：使用基准价
@@ -2045,6 +2051,17 @@ def predict_with_real_models(
             "基础工程": 0.15, "主体结构": 0.40,
             "屋面工程": 0.05, "外墙工程": 0.10,
         }
+    # 应用经验修正系数（用户提供了基础类型/地质条件时调整分部占比）
+    if division_composition and "subsection_xgb" in selected_set:
+        correction = engine.get_empirical_correction("subsection_xgb", project)
+        if correction:
+            for key, factor in correction.items():
+                if key in division_composition:
+                    division_composition[key] *= factor
+            # 重新归一化
+            dc_total = sum(division_composition.values())
+            if dc_total > 0:
+                division_composition = {k: round(v / dc_total, 4) for k, v in division_composition.items()}
 
     # ========== L2: 材料单方耗量 ==========
     material_consumption = {}
@@ -2235,5 +2252,24 @@ def predict_with_real_models(
     if not data_sources and total_train_samples > 0:
         data_sources.append({"source_file": "real_training_data.xlsx", "description": "真实工程造价项目数据", "sample_count": total_train_samples, "source_type": "real"})
     result["data_sources"] = data_sources
+
+    # ── 动态置信度评估 ──
+    all_model_ids = [mid for mid in selected_model_ids if factory.get_model(mid) and factory.get_model(mid).info.is_trained]
+    base_accs = {mid: factory.get_model(mid).info.accuracy for mid in all_model_ids}
+    all_assessments = engine.get_all_assessments(all_model_ids, project, base_accs)
+    overall_effective = round(
+        sum(a.effective_accuracy for a in all_assessments.values()) / len(all_assessments), 1
+    ) if all_assessments else result.get("average_accuracy", 0)
+    overall_bonus = round(
+        sum(a.input_bonus for a in all_assessments.values()) / len(all_assessments), 1
+    ) if all_assessments else 0.0
+    result["confidence"] = {
+        "overall": {
+            "effective_accuracy": overall_effective,
+            "base_accuracy": result.get("average_accuracy", 0),
+            "total_bonus": overall_bonus,
+        },
+        "per_model": {mid: a.to_dict() for mid, a in all_assessments.items()},
+    }
 
     return result

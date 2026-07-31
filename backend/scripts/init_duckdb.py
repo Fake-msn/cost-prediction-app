@@ -46,6 +46,34 @@ CREATE TABLE IF NOT EXISTS unit_project_meta (
     division VARCHAR
 );
 
+-- L2.5: 费用构成表 (从源 Excel E.2/F.1.1/E.3/H表-13 提取)
+CREATE TABLE IF NOT EXISTS project_cost_breakdown (
+    project_id VARCHAR PRIMARY KEY,
+    project_name VARCHAR NOT NULL,
+    building_trade_cost DOUBLE,
+    decoration_trade_cost DOUBLE,
+    installation_trade_cost DOUBLE,
+    foundation_division_cost DOUBLE,
+    main_structure_cost DOUBLE,
+    roofing_cost DOUBLE,
+    exterior_wall_cost DOUBLE,
+    part_item_cost DOUBLE,
+    measure_cost DOUBLE,
+    regulation_cost DOUBLE,
+    tax_cost DOUBLE,
+    labor_cost DOUBLE,
+    labor_source VARCHAR,
+    foundation_type VARCHAR,
+    extraction_date DATE,
+    source_file VARCHAR,
+    e2_count INTEGER,
+    f11_count INTEGER,
+    e3_count INTEGER,
+    h13_count INTEGER,
+    extraction_errors TEXT,
+    FOREIGN KEY (project_id) REFERENCES project_meta(project_id)
+);
+
 -- L3: 清单项目表 (核心)
 CREATE TABLE IF NOT EXISTS boq_items (
     item_id VARCHAR PRIMARY KEY,

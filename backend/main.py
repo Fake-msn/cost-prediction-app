@@ -666,6 +666,26 @@ async def train_one_model(model_id: str):
     return result
 
 
+@app.get("/api/confidence/preview")
+async def confidence_preview(
+    request: Request,
+):
+    """实时置信度预览 — 用户填写 Step3 表单时调用"""
+    from confidence import get_engine
+
+    params = {k: v for k, v in request.query_params.items() if v and k != "model_ids"}
+    engine = get_engine()
+
+    models_status = model_factory.list_models()
+    base_accs = {m["id"]: m.get("accuracy", 0) for m in models_status}
+
+    model_id_str = request.query_params.get("model_ids", "subsection_xgb,section_xgb,item_xgb")
+    model_ids = [m.strip() for m in model_id_str.split(",") if m.strip()]
+
+    preview = engine.get_preview(model_ids, params, base_accs)
+    return {"models": preview}
+
+
 @app.get("/api/train/status")
 async def train_status():
     """获取所有模型训练状态"""

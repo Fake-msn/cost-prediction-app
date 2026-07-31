@@ -1,0 +1,61 @@
+{
+  "version": "1.0",
+  "description": "动态置信度引擎配置 — bonus_rules 定义向导参数对模型可信度的贡献，empirical_correction 定义经验系数对预测值的修正",
+  "models": {
+    "subsection_xgb": {
+      "bonus_rules": {
+        "foundation_type": {"bonus": 15, "description": "基础形式直接影响基础工程造价占比"},
+        "seismic_grade":   {"bonus": 5,  "description": "抗震等级影响结构配筋和材料强度"},
+        "soil_condition":  {"bonus": 5,  "description": "地质条件影响地基处理方案和土方量"}
+      },
+      "max_bonus": 25,
+      "empirical_correction": {
+        "foundation_type": {
+          "独立基础":       {"基础占比": 0.85},
+          "筏板基础":       {"基础占比": 1.10},
+          "桩基础":         {"基础占比": 1.35},
+          "条形基础":       {"基础占比": 0.90},
+          "独立基础、筏板基础": {"基础占比": 1.00},
+          "桩基础、筏板基础":   {"基础占比": 1.25}
+        },
+        "soil_condition": {
+          "良好": {"基础占比": 0.92},
+          "一般": {"基础占比": 1.00},
+          "较差": {"基础占比": 1.15},
+          "复杂": {"基础占比": 1.30}
+        }
+      }
+    },
+    "section_xgb": {
+      "bonus_rules": {
+        "foundation_type": {"bonus": 8,  "description": "基础形式影响建筑工程与装饰工程的划分"},
+        "seismic_grade":   {"bonus": 5,  "description": "抗震等级影响建筑结构复杂度"},
+        "soil_condition":  {"bonus": 3,  "description": "地质影响基础设计复杂度"}
+      },
+      "max_bonus": 16,
+      "empirical_correction": {
+        "foundation_type": {
+          "桩基础":   {"建筑占比": 1.05},
+          "筏板基础": {"建筑占比": 1.03},
+          "独立基础": {"建筑占比": 0.98}
+        }
+      }
+    },
+    "item_xgb": {
+      "bonus_rules": {
+        "seismic_grade":   {"bonus": 8,  "description": "抗震等级直接影响混凝土和钢筋用量"},
+        "foundation_type": {"bonus": 5,  "description": "基础形式影响材料耗量"},
+        "soil_condition":  {"bonus": 3,  "description": "地质影响基础材料用量"}
+      },
+      "max_bonus": 16,
+      "empirical_correction": {
+        "seismic_grade": {
+          "一级": {"混凝土总用量": 1.12, "钢筋总用量": 1.15},
+          "二级": {"混凝土总用量": 1.06, "钢筋总用量": 1.08},
+          "三级": {"混凝土总用量": 1.00, "钢筋总用量": 1.00},
+          "四级": {"混凝土总用量": 0.95, "钢筋总用量": 0.93}
+        }
+      }
+    }
+  }
+}

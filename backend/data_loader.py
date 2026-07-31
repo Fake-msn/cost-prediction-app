@@ -149,6 +149,8 @@ class DataLoader:
         if self.use_duckdb:
             try:
                 self._sync_to_duckdb(imported, filename)
+                # 自动提取新项目的费用构成（如果源 Excel 可用）
+                self._auto_extract_cost_breakdown([r.get('项目名称') for r in imported])
             except Exception as e:
                 print(f"[DataLoader] DuckDB 同步失败: {e}")
         
@@ -200,6 +202,66 @@ class DataLoader:
                 ])
         finally:
             conn.close()
+
+    def _auto_extract_cost_breakdown(self, new_project_names: List[str] = None):
+        """自动提取新导入项目的费用构成（懒加载 extractor，避免循环依赖）
+
+        导入流程完成后调用：检查 DuckDB 中缺少 cost_breakdown 的项目，
+        尝试从源 Excel 目录匹配并提取。
+        """
+        if not HAS_DUCKDB:
+            return
+        try:
+            from cost_breakdown_extractor import (
+                ensure_cost_breakdown_table, find_source_excel,
+                process_project, insert_breakdown, get_project_id_by_name,
+                DEFAULT_SOURCE_DIR
+            )
+
+            ensure_cost_breakdown_table(self.db_path)
+
+            conn = duckdb.connect(self.db_path)
+            try:
+                if new_project_names:
+                    placeholders = ','.join(['?'] * len(new_project_names))
+                    missing = conn.execute(f"""
+                        SELECT pm.project_id, pm.name FROM project_meta pm
+                        WHERE pm.name IN ({placeholders})
+                          AND pm.name NOT IN (
+                              SELECT project_name FROM project_cost_breakdown
+                          )
+                    """, new_project_names).fetchall()
+                else:
+                    missing = conn.execute("""
+                        SELECT pm.project_id, pm.name FROM project_meta pm
+                        WHERE pm.name NOT IN (
+                            SELECT project_name FROM project_cost_breakdown
+                        )
+                    """).fetchall()
+            finally:
+                conn.close()
+
+            if not missing:
+                return
+
+            extracted = 0
+            for project_id, proj_name in missing:
+                excel_path = find_source_excel(proj_name, DEFAULT_SOURCE_DIR)
+                if not excel_path:
+                    continue
+                try:
+                    data = process_project(excel_path, proj_name)
+                    insert_breakdown(self.db_path, project_id, data)
+                    extracted += 1
+                except Exception as e:
+                    print(f"[DataLoader] 自动提取失败 {proj_name}: {e}")
+
+            if extracted > 0:
+                print(f"[DataLoader] 自动提取了 {extracted}/{len(missing)} 个新项目的费用构成")
+        except ImportError:
+            pass  # extractor 模块不可用时静默跳过
+        except Exception as e:
+            print(f"[DataLoader] 自动提取费用构成失败: {e}")
 
     def load_from_duckdb(self, limit: int = 1000) -> List[Dict]:
         """从 DuckDB 加载项目数据"""
@@ -546,9 +608,10 @@ class DataLoader:
                             '建造年份': row.get('建造年份'),
                             '装修标准': row.get('装修标准'),
                             '楼层数': row.get('楼层数'),
+                            '基础类型': row.get('基础类型'),
                         }
                 # 更新 base_df 中的对应字段
-                for col in ['建造年份', '装修标准', '楼层数']:
+                for col in ['建造年份', '装修标准', '楼层数', '基础类型']:
                     if col not in base_df.columns:
                         base_df[col] = None
                     for name, meta in meta_map.items():
@@ -649,9 +712,11 @@ class DataLoader:
                     pm.structure_type AS 结构类型,
                     pm.total_area     AS 总建筑面积,
                     pm.above_ground_floors AS 楼层数,
+                    pm.under_ground_floors AS 地下层数,
                     pm.location       AS 所在地区,
                     pm.build_year     AS 建造年份,
                     pm.decoration_standard AS 装修标准,
+                    pm.foundation_type AS 基础类型,
                     pm.total_cost     AS 项目总造价,
                     pm.unit_price     AS 单方造价,
                     pm.training_weight AS _sample_weight,
@@ -673,23 +738,77 @@ class DataLoader:
             if '建造年份' in df.columns:
                 df['建造年份'] = df['建造年份'].fillna(2023).astype(int)
 
-            # 为 DuckDB 行估算费用构成字段（DuckDB 无此数据，用规范比例估算）
-            # 这样 SVR 等使用全量特征的模型不会因全0而受负面影响
-            if '项目总造价' in df.columns and '人工费' not in df.columns:
-                tc = df['项目总造价'].fillna(0)
-                df['人工费'] = tc * 0.20
-                df['措施费'] = tc * 0.05
-                df['规费'] = tc * 0.05
-                df['税金'] = tc * 0.04
-                df['基础工程费'] = tc * 0.15
-                df['主体结构费'] = tc * 0.40
-                df['屋面工程费'] = tc * 0.05
-                df['外墙工程费'] = tc * 0.10
-                # 材料用量估算（按面积）
-                area = df['总建筑面积'].fillna(0)
-                df['混凝土总用量'] = area * 0.45
-                df['钢筋总用量'] = area * 0.055
-                df['砌块总用量'] = area * 0.25
+            # ── 费用构成字段：优先级链加载 ──
+            # P1: DuckDB project_cost_breakdown 表（源 Excel 提取的真实数据）
+            # P2: BOQ 聚合估算（按建筑类型差异化）
+            # P3: 固定比例兜底（确保模型不因全0受影响）
+            bd_loaded = False
+            try:
+                tables = conn.execute(
+                    "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
+                ).fetchall()
+                if 'project_cost_breakdown' in [t[0] for t in tables]:
+                    bd_rows = conn.execute("""
+                        SELECT project_name, building_trade_cost, decoration_trade_cost,
+                               installation_trade_cost, foundation_division_cost, main_structure_cost,
+                               roofing_cost, exterior_wall_cost, part_item_cost, measure_cost,
+                               regulation_cost, tax_cost, labor_cost, foundation_type
+                        FROM project_cost_breakdown
+                    """).fetchall()
+                    bd_map = {}
+                    for row in bd_rows:
+                        bd_map[row[0]] = {
+                            '建筑工程费': row[1] or 0,
+                            '装饰工程费': row[2] or 0,
+                            '安装工程费': row[3] or 0,
+                            '基础工程费': row[4] or 0,
+                            '主体结构费': row[5] or 0,
+                            '屋面工程费': row[6] or 0,
+                            '外墙工程费': row[7] or 0,
+                            '分部分项工程费': row[8] or 0,
+                            '措施费': row[9] or 0,
+                            '规费': row[10] or 0,
+                            '税金': row[11] or 0,
+                            '人工费': row[12] if row[12] and row[12] > 0 else None,
+                            '基础类型': row[13] if row[13] else None,
+                        }
+                    if bd_map:
+                        for col_name in ['人工费', '措施费', '规费', '税金',
+                                         '基础工程费', '主体结构费', '屋面工程费', '外墙工程费',
+                                         '建筑工程费', '装饰工程费', '安装工程费', '基础类型']:
+                            if col_name not in df.columns:
+                                df[col_name] = 0.0
+                        for idx in df.index:
+                            name = df.at[idx, '项目名称']
+                            if name in bd_map:
+                                bd = bd_map[name]
+                                for col_name, val in bd.items():
+                                    if val is not None and (isinstance(val, str) or val > 0):
+                                        df.at[idx, col_name] = val
+                        bd_loaded = True
+                        print(f"[data_loader] 从 project_cost_breakdown 加载了 {len(bd_map)} 个项目的费用构成")
+            except Exception as e:
+                print(f"[data_loader] 加载 cost_breakdown 失败: {e}")
+
+            # P3: 兜底 —— 固定比例合成（仅对仍然缺失的字段）
+            if not bd_loaded and '项目总造价' in df.columns:
+                missing_cost = df.get('人工费', pd.Series([0]*len(df))).fillna(0).sum() == 0
+                if missing_cost:
+                    tc = df['项目总造价'].fillna(0)
+                    df['人工费'] = tc * 0.20
+                    df['措施费'] = tc * 0.05
+                    df['规费'] = tc * 0.05
+                    df['税金'] = tc * 0.04
+                    df['基础工程费'] = tc * 0.15
+                    df['主体结构费'] = tc * 0.40
+                    df['屋面工程费'] = tc * 0.05
+                    df['外墙工程费'] = tc * 0.10
+                    # 材料用量估算（按面积）
+                    area = df['总建筑面积'].fillna(0)
+                    df['混凝土总用量'] = area * 0.45
+                    df['钢筋总用量'] = area * 0.055
+                    df['砌块总用量'] = area * 0.25
+                    print("[data_loader] 费用构成字段使用固定比例估算（兜底）")
 
             # 使用BOQ聚合数据派生 建筑工程费/装饰工程费/安装工程费
             # 这是 section_xgb 模型的关键目标字段
