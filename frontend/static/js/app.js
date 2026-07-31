@@ -203,6 +203,9 @@ function nextStep() {
             toast('请先选择预测阶段');
             return;
         }
+        if (currentStep === 3) {
+            collectStep3Params();
+        }
         if (currentStep === 4) {
             runPrediction();
             return;
@@ -373,18 +376,29 @@ function bindStep1Events() {
         });
 }
 
-function renderStep2() {
+async function renderStep2() {
     const stages = [
         { id: 'estimation', icon: '⚡', cls: 'est', name: '估算阶段', desc: '快速概览项目投资规模',
-          params: '7 个参数', accuracy: '70-80%',
+          params: '...', accuracy: '70-80%',
           points: ['适用于项目前期可行性研究', '基于类比估算和经验数据', '提供投资决策参考依据'] },
         { id: 'preliminary', icon: '🎯', cls: 'pre', name: '概算阶段', desc: '初步设计阶段的成本测算',
-          params: '32 个参数', accuracy: '80-90%',
+          params: '...', accuracy: '80-90%',
           points: ['适用于初步设计阶段', '基于初步设计图纸和方案', '作为项目投资控制的基准'] },
         { id: 'budget', icon: '🌿', cls: 'bud', name: '预算阶段', desc: '施工图设计阶段的精确测算',
-          params: '35 个参数', accuracy: '95%+',
+          params: '...', accuracy: '95%+',
           points: ['适用于施工图设计阶段', '基于详细设计图纸和清单', '作为招投标和合同签订依据'] }
     ];
+
+    // Fetch actual param counts from backend
+    for (const stage of stages) {
+        try {
+            const resp = await fetch(`/api/param-categories?stage=${stage.id}`);
+            const config = await resp.json();
+            stage.params = `${config.total} 个参数`;
+        } catch (e) {
+            stage.params = '参数配置';
+        }
+    }
 
     const html = `
         <h2>选择造价阶段</h2>
@@ -417,40 +431,56 @@ function renderStep2() {
     });
 }
 
-function renderStep3() {
-    const stageInfo = {
-        estimation: { count: 7, accuracy: '70-80%', tabs: [{ id: 'basic', name: '基础参数 (3)' }] },
-        preliminary: { count: 32, accuracy: '80-90%', tabs: [
-            { id: 'basic', name: '基础参数 (8)' }, { id: 'struct', name: '结构参数 (8)' },
-            { id: 'system', name: '系统参数 (8)' }, { id: 'decoration', name: '装修参数 (6)' }
-        ]},
-        budget: { count: 35, accuracy: '95%+', tabs: [
-            { id: 'basic', name: '基础参数 (8)' }, { id: 'struct', name: '结构参数 (8)' },
-            { id: 'system', name: '系统参数 (10)' }, { id: 'decoration', name: '装修参数 (9)' }
-        ]}
-    };
-    const info = stageInfo[projectData.stage] || stageInfo.estimation;
+async function renderStep3() {
+    const stepContent = document.getElementById('step-content');
+    stepContent.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-soft);">加载参数配置...</div>';
 
-    const html = `
+    // Fetch param config from backend
+    let paramConfig;
+    try {
+        const resp = await fetch(`/api/param-categories?stage=${projectData.stage}`);
+        paramConfig = await resp.json();
+    } catch (e) {
+        // Fallback if API fails
+        paramConfig = { categories: [{ name: "基础参数", count: 7, params: [] }], total: 7 };
+    }
+
+    const categories = paramConfig.categories;
+    const totalParams = paramConfig.total;
+    const stageLabel = projectData.stage === 'estimation' ? '估算' : projectData.stage === 'preliminary' ? '概算' : '预算';
+
+    // Build tabs - use actual param count from API
+    let tabsHtml = '<div class="param-tabs">';
+    categories.forEach((cat, i) => {
+        const active = i === 0 ? ' active' : '';
+        tabsHtml += `<div class="param-tab${active}" data-tab="${cat.name}" onclick="switchParamTab('${cat.name}')">${cat.name} (${cat.count})</div>`;
+    });
+    tabsHtml += '</div>';
+
+    // Build tab content panels
+    let contentHtml = '<div class="param-content">';
+    categories.forEach((cat, i) => {
+        const display = i === 0 ? 'block' : 'none';
+        contentHtml += `<div id="panel-${cat.name}" class="param-panel" style="display:${display}">`;
+        contentHtml += `<div id="fields-${cat.name}" class="param-fields"></div>`;
+        contentHtml += '</div>';
+    });
+    contentHtml += '</div>';
+
+    stepContent.innerHTML = `
         <div class="form-card" style="display:flex; justify-content:space-between; align-items:center;">
             <div>
-                <div class="form-card-title">${projectData.stage === 'estimation' ? '估算' : projectData.stage === 'preliminary' ? '概算' : '预算'}阶段</div>
-                <div class="form-card-desc">共 ${info.count} 个参数 · 精度 ${info.accuracy}</div>
+                <div class="form-card-title">${stageLabel}阶段</div>
+                <div class="form-card-desc">共 ${totalParams} 个参数</div>
             </div>
-            <button class="btn btn-ghost btn-sm">快速概览</button>
         </div>
 
         <div class="form-card">
-            <div class="form-card-title">配置 ${info.count} 个参数</div>
+            <div class="form-card-title">配置 ${totalParams} 个参数</div>
             <div class="form-card-desc">根据选择的阶段配置相应的技术参数，参数越详细预测越准确</div>
 
-            <div class="param-tabs">
-                ${info.tabs.map((t, i) => `<button class="param-tab ${i === 0 ? 'active' : ''}" data-tab="${t.id}">${t.name}</button>`).join('')}
-            </div>
-
-            <div class="param-content" id="param-content">
-                ${renderParamFields('basic')}
-            </div>
+            ${tabsHtml}
+            ${contentHtml}
 
             <div class="param-hint">
                 <span class="param-hint-icon">ⓘ</span>
@@ -458,72 +488,64 @@ function renderStep3() {
             </div>
         </div>
     `;
-    document.getElementById('step-content').innerHTML = html;
-    document.querySelectorAll('.param-tab').forEach(tab => {
-        tab.addEventListener('click', () => {
-            document.querySelectorAll('.param-tab').forEach(t => t.classList.remove('active'));
-            tab.classList.add('active');
-            document.getElementById('param-content').innerHTML = renderParamFields(tab.dataset.tab);
-        });
+
+    // Render fields for each category
+    categories.forEach(cat => {
+        renderParamFieldsFromConfig(cat.params, `fields-${cat.name}`);
     });
 }
 
-function renderParamFields(tab) {
-    const fieldMap = {
-        basic: [
-            { id: 'decoration', label: '装修标准', type: 'select', options: ['精装修', '一般装修', '简装修', '毛坯'] },
-            { id: 'decoration_inside', label: '室内装修', type: 'select', options: ['精装修', '一般装修', '简装修', '毛坯'] },
-            { id: 'basement', label: '地下室面积', type: 'number', unit: 'm²' },
-            { id: 'building_height', label: '建筑高度', type: 'number', unit: 'm' },
-        ],
-        struct: [
-            { id: 'foundation', label: '基础类型', type: 'select', options: ['筏板基础','条形基础','独立基础','桩基础'] },
-            { id: 'seismic', label: '抗震设防烈度', type: 'select', options: ['6度','7度','8度','9度'] },
-            { id: 'concrete_grade', label: '混凝土强度等级', type: 'select', options: ['C25','C30','C35','C40','C45','C50'] },
-            { id: 'steel_grade', label: '钢筋等级', type: 'select', options: ['HPB300','HRB400','HRB500'] },
-        ],
-        system: [
-            { id: 'hvac', label: '空调系统', type: 'select', options: ['分体空调','多联机','集中空调','无'] },
-            { id: 'elevator', label: '电梯配置', type: 'select', options: ['无','客梯','客货梯','医用梯'] },
-            { id: 'fire', label: '消防系统', type: 'select', options: ['消火栓','自动喷淋','气体灭火','智能消防'] },
-            { id: 'smart', label: '智能化系统', type: 'select', options: ['基础','标准','高级','智慧'] },
-        ],
-        decoration: [
-            { id: 'exterior', label: '外立面装修', type: 'select', options: ['涂料','面砖','石材','幕墙','铝板'] },
-            { id: 'roof', label: '屋面做法', type: 'select', options: ['防水卷材','刚性防水','种植屋面','金属屋面'] },
-            { id: 'window', label: '外窗类型', type: 'select', options: ['普通铝合金','断桥铝','塑钢','木铝复合'] },
-            { id: 'duration', label: '施工周期 (月)', type: 'number', placeholder: '24' },
-        ]
-    };
-    const fields = fieldMap[tab] || fieldMap.basic;
-    return `
-        <div class="param-grid">
-            ${fields.map(f => `
-                <div>
-                    <label>${f.label}</label>
-                    ${f.type === 'select' ? `
-                        <select id="param-${f.id}">
-                            ${f.options.map(o => `<option>${o}</option>`).join('')}
-                        </select>
-                    ` : `
-                        <input type="number" id="param-${f.id}" placeholder="${f.placeholder || ''}">
-                    `}
-                </div>
-            `).join('')}
-            <div class="full">
-                <label>特殊设备</label>
-                <select>
-                    <option>有</option><option>无</option>
-                </select>
-            </div>
-            <div class="full">
-                <label>地质条件</label>
-                <select>
-                    <option>一般</option><option>复杂</option><option>简单</option>
-                </select>
-            </div>
-        </div>
-    `;
+function renderParamFieldsFromConfig(params, containerId) {
+    const container = document.getElementById(containerId);
+    if (!container || !params || params.length === 0) {
+        if (container) container.innerHTML = '<p class="no-params">暂无可配置参数</p>';
+        return;
+    }
+
+    let html = '<div class="param-grid">';
+    params.forEach(p => {
+        const value = projectData[p.key] !== undefined ? projectData[p.key] : '';
+        html += `<div class="param-field">
+            <label for="param-${p.key}">${p.label}</label>`;
+
+        if (p.type === 'select' && p.options) {
+            html += `<select id="param-${p.key}" data-param-key="${p.key}">`;
+            html += `<option value="">请选择</option>`;
+            p.options.forEach(opt => {
+                const selected = String(value) === String(opt) ? ' selected' : '';
+                html += `<option value="${opt}"${selected}>${opt}</option>`;
+            });
+            html += '</select>';
+        } else if (p.type === 'number') {
+            html += `<input type="number" id="param-${p.key}" data-param-key="${p.key}" value="${value}" placeholder="${p.label}">`;
+        } else {
+            html += `<input type="text" id="param-${p.key}" data-param-key="${p.key}" value="${value}" placeholder="${p.label}">`;
+        }
+
+        html += '</div>';
+    });
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function switchParamTab(tabName) {
+    document.querySelectorAll('.param-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.param-panel').forEach(p => p.style.display = 'none');
+    const tab = document.querySelector(`.param-tab[data-tab="${tabName}"]`);
+    if (tab) tab.classList.add('active');
+    const panel = document.getElementById(`panel-${tabName}`);
+    if (panel) panel.style.display = 'block';
+}
+
+function collectStep3Params() {
+    document.querySelectorAll('[data-param-key]').forEach(el => {
+        const key = el.dataset.paramKey;
+        if (el.type === 'number') {
+            projectData[key] = parseFloat(el.value) || 0;
+        } else {
+            projectData[key] = el.value || '';
+        }
+    });
 }
 
 async function renderStep4() {
@@ -1121,6 +1143,7 @@ function autoFillWizardForm(features) {
         'project_name': 'f-project_name',
     };
 
+    let filledCount = 0;
     for (const [featureKey, elementId] of Object.entries(fieldMap)) {
         const value = features[featureKey];
         if (value !== null && value !== undefined) {
@@ -1130,6 +1153,12 @@ function autoFillWizardForm(features) {
                 // Trigger change event for any listeners
                 el.dispatchEvent(new Event('change', { bubbles: true }));
                 el.dispatchEvent(new Event('input', { bubbles: true }));
+
+                // 视觉高亮：短暂闪烁绿色边框
+                el.style.transition = 'box-shadow 0.3s';
+                el.style.boxShadow = '0 0 0 2px var(--success, #22c55e)';
+                setTimeout(() => { el.style.boxShadow = ''; }, 1500);
+                filledCount++;
             }
         }
     }
@@ -1149,6 +1178,13 @@ function autoFillWizardForm(features) {
         const value = features[featureKey];
         if (value !== null && value !== undefined) {
             projectData[dataKey] = value;
+        }
+    }
+
+    // 显示填充提示
+    if (filledCount > 0) {
+        if (typeof toast === 'function') {
+            toast(`已自动填充 ${filledCount} 个字段，请核对后预测`, 'success');
         }
     }
 }
@@ -1272,6 +1308,113 @@ function initChat() {
             sendChat();
         });
     });
+
+    // 对话模式文件上传
+    const uploadBtn = document.getElementById('btn-chat-upload');
+    const fileInput = document.getElementById('chat-file-upload');
+    if (uploadBtn && fileInput) {
+        uploadBtn.addEventListener('click', () => fileInput.click());
+        uploadBtn.addEventListener('mouseenter', () => {
+            uploadBtn.style.background = 'var(--bg-soft)';
+            uploadBtn.style.color = 'var(--accent)';
+        });
+        uploadBtn.addEventListener('mouseleave', () => {
+            uploadBtn.style.background = 'none';
+            uploadBtn.style.color = 'var(--text-soft)';
+        });
+        fileInput.addEventListener('change', e => {
+            if (e.target.files[0]) {
+                handleChatFileUpload(e.target.files[0]);
+                e.target.value = '';  // reset for re-upload
+            }
+        });
+    }
+}
+
+// 对话模式文件上传处理
+async function handleChatFileUpload(file) {
+    const ext = file.name.split('.').pop().toLowerCase();
+    const allowed = ['docx', 'doc', 'pdf', 'xlsx', 'xls'];
+    if (!allowed.includes(ext)) {
+        toast(`不支持的格式: .${ext}`, 'error');
+        return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+        toast('文件过大，限制 50MB', 'error');
+        return;
+    }
+
+    // 移除欢迎语
+    const welcome = document.querySelector('.chat-welcome');
+    if (welcome) welcome.remove();
+
+    // 显示用户上传消息
+    appendMessage('user', `📎 上传文件: ${file.name}`);
+
+    // 显示加载中
+    const loadingId = appendLoading();
+
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('session_id', currentSessionId);
+
+        const response = await fetch('/api/chat/upload', {
+            method: 'POST',
+            body: formData,
+        });
+
+        const data = await response.json();
+        document.getElementById(loadingId)?.remove();
+
+        if (!response.ok) {
+            throw new Error(data.detail || '文件解析失败');
+        }
+
+        // 构造文件分析卡片
+        let cardHtml = `<div class="file-analysis-card" style="background:var(--bg-soft);border-radius:10px;padding:14px;margin-bottom:12px;border:1px solid var(--border);">`;
+        cardHtml += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">`;
+        cardHtml += `<span style="font-size:18px;">📄</span>`;
+        cardHtml += `<strong>${data.filename}</strong>`;
+        cardHtml += `<span style="font-size:12px;color:var(--text-soft);">格式:${data.format} | 页数:${data.pages} | 完整度:${(data.completeness * 100).toFixed(0)}%</span>`;
+        cardHtml += `</div>`;
+
+        // 提取的特征表
+        if (data.features && Object.keys(data.features).length > 0) {
+            const labels = {
+                'project_name': '项目名称', 'building_type': '建筑类型', 'structure_type': '结构类型',
+                'total_area': '总建筑面积(㎡)', 'floor_count': '楼层数', 'location': '所在地区',
+                'build_year': '建造年份', 'decoration_standard': '装修标准',
+                'total_cost': '项目总造价(元)', 'unit_price': '单方造价(元/㎡)'
+            };
+            cardHtml += `<table style="width:100%;font-size:13px;border-collapse:collapse;margin-bottom:10px;">`;
+            for (const [key, value] of Object.entries(data.features)) {
+                if (key === 'confidence' || key === 'extraction_source') continue;
+                if (value !== null && value !== undefined) {
+                    const label = labels[key] || key;
+                    const conf = data.confidence && data.confidence[key] ? ` <span style="color:var(--text-mute);font-size:11px;">(${(data.confidence[key] * 100).toFixed(0)}%)</span>` : '';
+                    cardHtml += `<tr><td style="padding:3px 10px 3px 0;color:var(--text-soft);white-space:nowrap;">${label}:</td><td style="padding:3px 0;"><strong>${value}</strong>${conf}</td></tr>`;
+                }
+            }
+            cardHtml += `</table>`;
+        }
+
+        if (data.warnings && data.warnings.length > 0) {
+            cardHtml += `<div style="font-size:12px;color:orange;margin-bottom:8px;">⚠️ ${data.warnings.join('; ')}</div>`;
+        }
+        cardHtml += `</div>`;
+
+        // 显示 AI 分析回复（含文件卡片）
+        appendMessage('assistant', cardHtml + data.reply, data.react_steps);
+
+        // 滚动到底部
+        const chatMsgs = document.getElementById('chat-messages');
+        if (chatMsgs) chatMsgs.scrollTop = chatMsgs.scrollHeight;
+
+    } catch (error) {
+        document.getElementById(loadingId)?.remove();
+        appendMessage('assistant', `❌ 文件解析失败: ${error.message}`);
+    }
 }
 
 async function sendChat() {

@@ -100,6 +100,7 @@ class PDFParser:
     """解析 PDF 文档（支持扫描件 OCR）"""
 
     SCANNED_THRESHOLD = 50  # 每页文本字符数低于此值视为扫描件
+    PARTIAL_SCAN_THRESHOLD = 200  # 低于此值视为半扫描页（文本稀疏）
 
     def parse(self, file_path: str) -> ParseResult:
         filename = os.path.basename(file_path)
@@ -123,14 +124,27 @@ class PDFParser:
 
         text_pages: List[str] = []
         scanned_page_count = 0
+        ocr_confidences: List[float] = []
 
         for page_idx, page in enumerate(doc):
             page_text = page.get_text().strip()
+
+            # 智能检测：文本极少 → 扫描页；文本稀疏 → 半扫描页
             if len(page_text) < self.SCANNED_THRESHOLD:
                 scanned_page_count += 1
-                # 尝试 OCR
-                ocr_text = self._ocr_page(page)
+                ocr_text, confidence = self._ocr_page_with_confidence(page)
                 text_pages.append(ocr_text)
+                if confidence > 0:
+                    ocr_confidences.append(confidence)
+            elif len(page_text) < self.PARTIAL_SCAN_THRESHOLD:
+                # 半扫描页：尝试 OCR 补充，但优先用已有文本
+                ocr_text, confidence = self._ocr_page_with_confidence(page)
+                if len(ocr_text) > len(page_text) * 1.5:
+                    text_pages.append(ocr_text)
+                    if confidence > 0:
+                        ocr_confidences.append(confidence)
+                else:
+                    text_pages.append(page_text)
             else:
                 text_pages.append(page_text)
 
@@ -139,6 +153,17 @@ class PDFParser:
         result.full_text = "\n".join(text_pages)
         if result.pages > 0 and scanned_page_count / result.pages > 0.5:
             result.is_scanned = True
+
+        # OCR 质量报告
+        if ocr_confidences:
+            avg_conf = sum(ocr_confidences) / len(ocr_confidences)
+            result.metadata['ocr_avg_confidence'] = round(avg_conf, 2)
+            result.metadata['ocr_pages'] = len(ocr_confidences)
+            if avg_conf < 60:
+                result.warnings.append(
+                    f"OCR 识别置信度偏低 ({avg_conf:.0f}%)，"
+                    f"建议检查扫描件质量或手动核对关键字段。"
+                )
 
         # ---- 使用 pdfplumber 提取表格 ----
         try:
@@ -166,12 +191,12 @@ class PDFParser:
         return result
 
     def _ocr_page(self, page) -> str:
-        """对单页进行 OCR 识别"""
+        """对单页进行 OCR 识别（增强版：预处理 + 后处理）"""
         if pytesseract is None:
             return "[OCR 不可用：缺少 pytesseract]"
         try:
             import fitz as _fitz
-            from PIL import Image
+            from PIL import Image, ImageFilter, ImageOps
             import io
 
             # 以 300 DPI 渲染页面为图像
@@ -180,11 +205,123 @@ class PDFParser:
             img_data = pix.tobytes("png")
             img = Image.open(io.BytesIO(img_data))
 
-            # OCR：中文简体 + 英文
-            text = pytesseract.image_to_string(img, lang='chi_sim+eng')
+            # ── 图像预处理 ──
+            img = self._preprocess_image(img)
+
+            # ── OCR 识别（优化参数）──
+            # --psm 6: 假设为统一文本块，适合整页文档
+            # --oem 1: LSTM 引擎，对中文识别率最高
+            config = '--psm 6 --oem 1 -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz，。：；！？、（）《》""''—·㎡m³/kg个套台组只系统樘层'
+            text = pytesseract.image_to_string(img, lang='chi_sim+eng', config=config)
+
+            # ── 后处理：修复 OCR 常见问题 ──
+            text = self._postprocess_ocr_text(text)
             return text.strip()
         except Exception as exc:
             return f"[OCR 失败: {exc}]"
+
+    def _preprocess_image(self, img):
+        """图像预处理：灰度 → 降噪 → 自适应阈值 → 倾斜矫正"""
+        from PIL import Image, ImageFilter, ImageOps
+        import io
+
+        # 1. 转灰度
+        if img.mode != 'L':
+            img = img.convert('L')
+
+        # 2. 中值滤波降噪（保留边缘）
+        img = img.filter(ImageFilter.MedianFilter(size=3))
+
+        # 3. 自动对比度增强
+        img = ImageOps.autocontrast(img, cutoff=2)
+
+        # 4. 二值化（自适应阈值，使用 Otsu 近似）
+        # PIL 没有自适应阈值，用 point 操作做简单二值化
+        threshold = 140
+        img = img.point(lambda x: 255 if x > threshold else 0, '1')
+
+        # 5. 轻微锐化
+        img = img.convert('L').filter(ImageFilter.SHARPEN)
+
+        return img
+
+    def _postprocess_ocr_text(self, text: str) -> str:
+        """OCR 文本后处理：修复断行、碎片合并、常见误识"""
+        if not text:
+            return text
+
+        import re
+
+        # 1. 修复断行：行尾非标点且下一行非空 → 合并
+        lines = text.split('\n')
+        merged = []
+        for i, line in enumerate(lines):
+            line = line.rstrip()
+            if not line:
+                if merged and merged[-1]:
+                    merged.append('')  # 保留空行作为段落分隔
+                continue
+            # 如果上一行末尾不是标点/符号，且当前行不是新段落开头（不以数字/项目编号开头）
+            if merged and merged[-1] and merged[-1][-1] not in '。；：！？、）》」』,;:!?)>..．':
+                if not re.match(r'^[\d一二三四五六七八九十]+[、.．]', line) and not line.startswith('【'):
+                    merged[-1] += line
+                    continue
+            merged.append(line)
+
+        text = '\n'.join(merged)
+
+        # 2. 修复常见 OCR 误识
+        fixes = {
+            'l': '1',  # 小写L → 1 (在数字上下文中)
+            'O': '0',  # 大写O → 0
+            '。.': '。',  # 重复标点
+            '，，': '，',
+            '  ': ' ',   # 双空格
+        }
+        # 仅在数字上下文中替换 l→1, O→0
+        text = re.sub(r'(?<=\d)l(?=\d)', '1', text)
+        text = re.sub(r'(?<=\d)O(?=\d)', '0', text)
+        text = re.sub(r'。。+', '。', text)
+        text = re.sub(r'，，+', '，', text)
+        text = re.sub(r'  +', ' ', text)
+
+        # 3. 合并跨行数字（如 "69,474" 被拆成 "69,\n474"）
+        text = re.sub(r',\n(\d)', r',\1', text)
+
+        # 4. 修复"㎡"被 OCR 拆成"m2"或"rn2"的情况
+        text = re.sub(r'[rn]2', '㎡', text)
+        text = re.sub(r'm2(?![0-9])', '㎡', text)
+
+        return text
+
+    def _ocr_page_with_confidence(self, page) -> tuple:
+        """OCR 识别并返回 (text, avg_confidence)"""
+        if pytesseract is None:
+            return ("[OCR 不可用]", 0.0)
+        try:
+            import fitz as _fitz
+            from PIL import Image
+            import io
+
+            mat = _fitz.Matrix(300 / 72, 300 / 72)
+            pix = page.get_pixmap(matrix=mat)
+            img = Image.open(io.BytesIO(pix.tobytes("png")))
+            img = self._preprocess_image(img)
+
+            config = '--psm 6 --oem 1'
+            text = pytesseract.image_to_string(img, lang='chi_sim+eng', config=config)
+            text = self._postprocess_ocr_text(text)
+
+            # 获取置信度
+            import pytesseract as _pt
+            data = _pt.image_to_data(img, lang='chi_sim+eng', config=config,
+                                     output_type=_pt.Output.DICT)
+            confidences = [int(c) for c in data['conf'] if int(c) > 0]
+            avg_conf = sum(confidences) / len(confidences) if confidences else 0.0
+
+            return (text, avg_conf)
+        except Exception as exc:
+            return (f"[OCR 失败: {exc}]", 0.0)
 
 
 class ExcelParser:

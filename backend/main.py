@@ -23,7 +23,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from terminology import (
     COST_STAGES, COST_HIERARCHY, PROJECT_TYPES, STRUCTURE_TYPES,
-    ESTIMATION_PARAMS, MODELS_REGISTRY, get_stage_info, get_param_categories
+    ESTIMATION_PARAMS, PRELIMINARY_PARAMS, BUDGET_PARAMS,
+    MODELS_REGISTRY, get_stage_info, get_param_categories
 )
 from ml_models import RealModelFactory, predict_with_real_models
 from data_loader import DataLoader, generate_sample_excel
@@ -146,18 +147,37 @@ class ChatRequest(BaseModel):
 
 
 class ProjectRequest(BaseModel):
-    project_name: str
-    project_type: str
-    structure_type: str
-    total_area: float
-    floors: int
-    location: str
+    project_name: str = ""
+    project_type: str = "住宅"
+    structure_type: str = "框架结构"
+    total_area: float = 10000
+    floors: int = 10
+    location: str = "华东"
     build_year: int = 2026
     decoration_level: str = "普通装修"
     stage: str = "estimation"
     selected_models: Optional[List[str]] = None
     basement_area: float = 0
     building_height: float = 0
+    # Step3 extension parameters (all optional)
+    foundation_type: str = ""
+    seismic_grade: str = ""
+    concrete_grade: str = ""
+    steel_grade: str = ""
+    soil_condition: str = ""
+    special_equipment: str = ""
+    hvac: str = ""
+    elevator: str = ""
+    fire_system: str = ""
+    smart_building: str = ""
+    exterior_wall: str = ""
+    roof_type: str = ""
+    window_type: str = ""
+    duration: int = 0
+    parking_ratio: float = 0
+    green_rating: str = ""
+    elevator_count: int = 0
+    parking_count: int = 0
 
 
 # ==================== API 路由 ====================
@@ -251,6 +271,12 @@ async def get_stage_params(stage: str):
     }
 
 
+@app.get("/api/param-categories")
+async def get_param_categories_api(stage: str = "estimation"):
+    """获取指定阶段的参数分类"""
+    return get_param_categories(stage)
+
+
 @app.post("/api/predict")
 async def predict_project(req: ProjectRequest):
     """使用真实训练的三层模型进行造价预测"""
@@ -266,6 +292,25 @@ async def predict_project(req: ProjectRequest):
         "stage": req.stage,
         "basement_area": req.basement_area,
         "building_height": req.building_height,
+        # Step3 extension params
+        "foundation_type": req.foundation_type,
+        "seismic_grade": req.seismic_grade,
+        "concrete_grade": req.concrete_grade,
+        "steel_grade": req.steel_grade,
+        "soil_condition": req.soil_condition,
+        "special_equipment": req.special_equipment,
+        "hvac": req.hvac,
+        "elevator": req.elevator,
+        "fire_system": req.fire_system,
+        "smart_building": req.smart_building,
+        "exterior_wall": req.exterior_wall,
+        "roof_type": req.roof_type,
+        "window_type": req.window_type,
+        "duration": req.duration,
+        "parking_ratio": req.parking_ratio,
+        "green_rating": req.green_rating,
+        "elevator_count": req.elevator_count,
+        "parking_count": req.parking_count,
     }
 
     # 默认模型：每个层级选一个
@@ -327,6 +372,128 @@ async def chat_with_agent(req: ChatRequest):
         "backend": result.get("backend", "unknown"),
         "history_count": len(history)
     }
+
+
+@app.post("/api/chat/upload")
+async def chat_upload_file(file: UploadFile = File(...), session_id: str = "default"):
+    """对话模式文件上传：解析文件 → 提取特征 → LLM 智能分析
+
+    返回文件解析结果 + LLM 对文件内容的分析建议
+    """
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(400, f"不支持的格式: {ext}，支持: {ALLOWED_EXTENSIONS}")
+
+    content = await file.read()
+    if len(content) > MAX_UPLOAD_SIZE:
+        raise HTTPException(400, f"文件过大，限制: {MAX_UPLOAD_SIZE // 1024 // 1024}MB")
+
+    task_id = str(uuid.uuid4())[:8]
+    temp_path = os.path.join(UPLOAD_DIR, f"{task_id}_{file.filename}")
+
+    with open(temp_path, 'wb') as f:
+        f.write(content)
+
+    try:
+        # 1. 解析文档
+        parser = DocumentParser()
+        result = parser.parse(temp_path)
+
+        # 2. 提取特征
+        extractor = FeatureExtractor()
+        features = extractor.extract(result)
+
+        # 3. 构造 LLM 分析上下文
+        file_context = _build_file_context_for_agent(file.filename, result, features)
+
+        # 4. 调用 agent 分析文件内容
+        analysis_prompt = (
+            f"用户上传了一份项目文件「{file.filename}」，我已解析并提取了以下关键信息：\n\n"
+            f"{file_context}\n\n"
+            f"请基于这些信息：\n"
+            f"1. 总结项目的关键特征\n"
+            f"2. 指出哪些信息已成功提取、哪些仍缺失需要用户补充\n"
+            f"3. 给出初步的造价预测建议（可调用 predict_cost 工具）\n"
+            f"4. 如果信息不足以预测，明确告诉用户还需要哪些参数"
+        )
+
+        if session_id not in SESSIONS:
+            SESSIONS[session_id] = []
+
+        history = SESSIONS[session_id]
+        agent_result = await cost_agent.chat(analysis_prompt, history, session_id)
+
+        # 更新会话历史
+        history.append({"role": "user", "content": f"📎 上传文件: {file.filename}"})
+        history.append({"role": "assistant", "content": agent_result["reply"]})
+        _save_sessions()
+
+        return {
+            "task_id": task_id,
+            "session_id": session_id,
+            "filename": file.filename,
+            "format": result.file_format,
+            "is_scanned": result.is_scanned,
+            "pages": result.pages,
+            "features": features.to_dict(),
+            "completeness": features.completeness(),
+            "confidence": features.confidence,
+            "warnings": result.warnings,
+            "reply": agent_result["reply"],
+            "react_steps": agent_result.get("react_steps", []),
+            "tool_result": agent_result.get("tool_result"),
+            "backend": agent_result.get("backend", "unknown"),
+            "message": "文件解析完成，AI 已分析项目信息并给出预测建议。"
+        }
+
+    except Exception as e:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        raise HTTPException(500, f"解析失败: {str(e)}")
+
+
+def _build_file_context_for_agent(filename: str, parse_result, features) -> str:
+    """构造供 LLM 分析的文件上下文摘要"""
+    lines = [f"📁 文件: {filename}"]
+    lines.append(f"📄 格式: {parse_result.file_format} | 页数: {parse_result.pages} | "
+                 f"扫描件: {'是' if parse_result.is_scanned else '否'}")
+
+    if features.project_name:
+        lines.append(f"📝 项目名称: {features.project_name}")
+    if features.building_type:
+        lines.append(f"🏢 建筑类型: {features.building_type}")
+    if features.structure_type:
+        lines.append(f"🏗️ 结构类型: {features.structure_type}")
+    if features.total_area:
+        lines.append(f"📐 总建筑面积: {features.total_area:,.0f} ㎡")
+    if features.floor_count:
+        lines.append(f"🏗️ 楼层数: {features.floor_count}")
+        if features.above_ground_floors or features.under_ground_floors:
+            ag = features.above_ground_floors or '?'
+            ug = features.under_ground_floors or '?'
+            lines.append(f"   (地上 {ag} 层, 地下 {ug} 层)")
+    if features.location:
+        lines.append(f"📍 所在地区: {features.location}")
+    if features.build_year:
+        lines.append(f"📅 建造年份: {features.build_year}")
+    if features.decoration_standard:
+        lines.append(f"🎨 装修标准: {features.decoration_standard}")
+    if features.total_cost:
+        lines.append(f"💰 项目总造价: {features.total_cost:,.2f} 元")
+    if features.unit_price:
+        lines.append(f"💵 单方造价: {features.unit_price:,.2f} 元/㎡")
+
+    lines.append(f"\n📊 特征完整度: {features.completeness():.0%}")
+
+    # 添加文本摘要（前 500 字符）
+    if parse_result.full_text:
+        text_preview = parse_result.full_text[:500].replace('\n', ' ')
+        lines.append(f"\n📄 文档摘要: {text_preview}...")
+
+    if parse_result.warnings:
+        lines.append(f"\n⚠️ 解析警告: {'; '.join(parse_result.warnings)}")
+
+    return '\n'.join(lines)
 
 
 @app.get("/api/chat/sessions")

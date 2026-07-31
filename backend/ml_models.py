@@ -169,6 +169,172 @@ SAFE_CATEGORICAL = ["建筑类型", "结构类型", "所在地区", "装修标�
 SAFE_NUMERIC = ["总建筑面积", "楼层数", "建造年份", "混凝土总用量", "钢筋总用量", "砌块总用量"]
 SAFE_LOG1P_FEATURES = ["混凝土总用量", "钢筋总用量", "砌块总用量"]
 
+# ============================================================
+# 建筑类型差异化系数表 - 解决配置参数不影响预测结果的问题
+# ============================================================
+BUILDING_COEFFICIENTS = {
+    ("住宅", "框架结构"): {
+        "division": {"基础工程": 0.15, "主体结构": 0.45, "屋面工程": 0.08, "外墙工程": 0.12},
+        "material": {"混凝土": 0.40, "钢筋": 0.050, "砌块": 0.20},
+        "composition": {"直接工程费": 0.62, "间接费": 0.14, "利润": 0.07, "税金": 0.04, "其他": 0.13},
+    },
+    ("住宅", "剪力墙结构"): {
+        "division": {"基础工程": 0.18, "主体结构": 0.48, "屋面工程": 0.06, "外墙工程": 0.10},
+        "material": {"混凝土": 0.50, "钢筋": 0.065, "砌块": 0.15},
+        "composition": {"直接工程费": 0.64, "间接费": 0.13, "利润": 0.06, "税金": 0.04, "其他": 0.13},
+    },
+    ("住宅", "砖混结构"): {
+        "division": {"基础工程": 0.12, "主体结构": 0.40, "屋面工程": 0.10, "外墙工程": 0.15},
+        "material": {"混凝土": 0.30, "钢筋": 0.035, "砌块": 0.30},
+        "composition": {"直接工程费": 0.60, "间接费": 0.15, "利润": 0.07, "税金": 0.04, "其他": 0.14},
+    },
+    ("商业综合体", "钢结构"): {
+        "division": {"基础工程": 0.20, "主体结构": 0.40, "屋面工程": 0.05, "外墙工程": 0.15},
+        "material": {"混凝土": 0.35, "钢筋": 0.080, "砌块": 0.10},
+        "composition": {"直接工程费": 0.58, "间接费": 0.16, "利润": 0.08, "税金": 0.04, "其他": 0.14},
+    },
+    ("商业综合体", "框架结构"): {
+        "division": {"基础工程": 0.18, "主体结构": 0.42, "屋面工程": 0.06, "外墙工程": 0.14},
+        "material": {"混凝土": 0.38, "钢筋": 0.070, "砌块": 0.12},
+        "composition": {"直接工程费": 0.59, "间接费": 0.15, "利润": 0.08, "税金": 0.04, "其他": 0.14},
+    },
+    ("办公楼", "框架结构"): {
+        "division": {"基础工程": 0.16, "主体结构": 0.44, "屋面工程": 0.07, "外墙工程": 0.13},
+        "material": {"混凝土": 0.38, "钢筋": 0.060, "砌块": 0.18},
+        "composition": {"直接工程费": 0.60, "间接费": 0.15, "利润": 0.07, "税金": 0.04, "其他": 0.14},
+    },
+    ("办公楼", "钢结构"): {
+        "division": {"基础工程": 0.19, "主体结构": 0.41, "屋面工程": 0.06, "外墙工程": 0.14},
+        "material": {"混凝土": 0.33, "钢筋": 0.075, "砌块": 0.12},
+        "composition": {"直接工程费": 0.58, "间接费": 0.16, "利润": 0.08, "税金": 0.04, "其他": 0.14},
+    },
+    ("学校", "框架结构"): {
+        "division": {"基础工程": 0.14, "主体结构": 0.43, "屋面工程": 0.09, "外墙工程": 0.14},
+        "material": {"混凝土": 0.42, "钢筋": 0.055, "砌块": 0.22},
+        "composition": {"直接工程费": 0.61, "间接费": 0.14, "利润": 0.07, "税金": 0.04, "其他": 0.14},
+    },
+    ("医院", "框架结构"): {
+        "division": {"基础工程": 0.17, "主体结构": 0.42, "屋面工程": 0.07, "外墙工程": 0.12},
+        "material": {"混凝土": 0.42, "钢筋": 0.065, "砌块": 0.15},
+        "composition": {"直接工程费": 0.57, "间接费": 0.16, "利润": 0.07, "税金": 0.04, "其他": 0.16},
+    },
+    ("工业厂房", "钢结构"): {
+        "division": {"基础工程": 0.12, "主体结构": 0.38, "屋面工程": 0.12, "外墙工程": 0.10},
+        "material": {"混凝土": 0.25, "钢筋": 0.045, "砌块": 0.08},
+        "composition": {"直接工程费": 0.65, "间接费": 0.12, "利润": 0.06, "税金": 0.04, "其他": 0.13},
+    },
+    ("酒店", "框架结构"): {
+        "division": {"基础工程": 0.16, "主体结构": 0.43, "屋面工程": 0.07, "外墙工程": 0.14},
+        "material": {"混凝土": 0.40, "钢筋": 0.060, "砌块": 0.16},
+        "composition": {"直接工程费": 0.56, "间接费": 0.16, "利润": 0.08, "税金": 0.04, "其他": 0.16},
+    },
+    ("酒店", "剪力墙结构"): {
+        "division": {"基础工程": 0.18, "主体结构": 0.46, "屋面工程": 0.06, "外墙工程": 0.12},
+        "material": {"混凝土": 0.48, "钢筋": 0.065, "砌块": 0.14},
+        "composition": {"直接工程费": 0.55, "间接费": 0.17, "利润": 0.08, "税金": 0.04, "其他": 0.16},
+    },
+}
+
+# 默认系数（行业平均值，用于未匹配的建筑类型）
+DEFAULT_COEFFICIENTS = {
+    "division": {"基础工程": 0.16, "主体结构": 0.43, "屋面工程": 0.07, "外墙工程": 0.13},
+    "material": {"混凝土": 0.40, "钢筋": 0.055, "砌块": 0.18},
+    "composition": {"直接工程费": 0.60, "间接费": 0.15, "利润": 0.07, "税金": 0.04, "其他": 0.14},
+}
+
+# ============================================================
+# 地区归一化映射 - 将混合粒度的地区值统一为7个大区
+# 训练数据可能含省份/城市级别值（如四川/成都/广元），
+# 而模型仅认识7个大区，必须在训练和预测前统一归一化
+# ============================================================
+CITY_TO_REGION = {
+    # 西南
+    "四川": "西南", "成都": "西南", "重庆": "西南", "广元": "西南", "昆明": "西南", "贵阳": "西南",
+    "贵州": "西南", "云南": "西南", "西藏": "西南",
+    # 华北
+    "北京": "华北", "天津": "华北", "河北": "华北", "山西": "华北", "内蒙古": "华北",
+    # 华东
+    "上海": "华东", "江苏": "华东", "浙江": "华东", "安徽": "华东", "福建": "华东",
+    "江西": "华东", "山东": "华东",
+    # 华南
+    "广东": "华南", "广西": "华南", "海南": "华南", "深圳": "华南", "广州": "华南",
+    # 华中
+    "湖北": "华中", "湖南": "华中", "河南": "华中", "武汉": "华中", "长沙": "华中", "郑州": "华中",
+    # 西北
+    "陕西": "西北", "甘肃": "西北", "青海": "西北", "宁夏": "西北", "新疆": "西北", "西安": "西北",
+    # 东北
+    "辽宁": "东北", "吉林": "东北", "黑龙江": "东北", "沈阳": "东北", "大连": "东北", "哈尔滨": "东北",
+}
+
+VALID_REGIONS = {"华北", "华东", "华南", "华中", "西南", "西北", "东北"}
+
+
+def normalize_region(location) -> str:
+    """将任意粒度的地区值归一化为7个大区之一。
+
+    查找优先级：
+    1. 如果本身就是大区，直接返回
+    2. 如果在城市/省份映射表中，返回对应大区
+    3. 默认返回"华东"（训练数据最多的区域之一）
+    """
+    if not location:
+        return "华东"
+    location = str(location).strip()
+    if location in VALID_REGIONS:
+        return location
+    return CITY_TO_REGION.get(location, "华东")
+
+
+def get_building_coefficients(project):
+    """根据项目特征获取差异化系数。
+
+    查找优先级：
+    1. (建筑类型, 结构类型) 精确匹配
+    2. 建筑类型模糊匹配（取该类型下所有结构类型的平均值）
+    3. 全行业默认值
+
+    还包含楼层数调整因子：
+    - 超高层(>50F): 基础工程×1.3, 主体结构×1.1
+    - 低层(<6F): 屋面工程×1.2
+    """
+    import copy
+
+    building_type = project.get("建筑类型", project.get("project_type", ""))
+    structure_type = project.get("结构类型", project.get("structure_type", ""))
+    floors = int(project.get("楼层数", project.get("floors", 10)))
+
+    # 1. 精确匹配
+    key = (building_type, structure_type)
+    if key in BUILDING_COEFFICIENTS:
+        result = copy.deepcopy(BUILDING_COEFFICIENTS[key])
+    else:
+        # 2. 模糊匹配：按建筑类型
+        type_matches = {k: v for k, v in BUILDING_COEFFICIENTS.items() if k[0] == building_type}
+        if type_matches:
+            result = copy.deepcopy(DEFAULT_COEFFICIENTS)
+            for coeff_type in ["division", "material", "composition"]:
+                for sub_key in result[coeff_type]:
+                    vals = [v[coeff_type][sub_key] for v in type_matches.values() if sub_key in v[coeff_type]]
+                    if vals:
+                        result[coeff_type][sub_key] = sum(vals) / len(vals)
+        else:
+            # 3. 默认值
+            result = copy.deepcopy(DEFAULT_COEFFICIENTS)
+
+    # 楼层数调整因子
+    if floors > 50:
+        result["division"]["基础工程"] *= 1.3
+        result["division"]["主体结构"] *= 1.1
+    elif floors < 6:
+        result["division"]["屋面工程"] *= 1.2
+
+    # 重新归一化 division 使总和 = 1.0
+    div_total = sum(result["division"].values())
+    if div_total > 0:
+        result["division"] = {k: round(v / div_total, 4) for k, v in result["division"].items()}
+
+    return result
+
 
 def build_feature_preprocessor() -> ColumnTransformer:
     """构建特征预处理器：类别 one-hot + 数值标准化"""
@@ -270,7 +436,7 @@ def extract_boq_features(df: pd.DataFrame) -> pd.DataFrame:
     feature_df['unit'] = df['unit'].fillna('未知').astype(str)
     feature_df['building_type'] = df.get('building_type', pd.Series(['未知']*len(df))).fillna('未知').astype(str)
     feature_df['structure_type'] = df.get('structure_type', pd.Series(['未知']*len(df))).fillna('未知').astype(str)
-    feature_df['region'] = df.get('location', pd.Series(['未知']*len(df))).fillna('未知').astype(str)
+    feature_df['region'] = df.get('location', pd.Series(['未知']*len(df))).fillna('未知').astype(str).apply(normalize_region)
     feature_df['log_quantity'] = np.log1p(pd.to_numeric(df['quantity'], errors='coerce').fillna(0))
     feature_df['floor_count'] = pd.to_numeric(df.get('above_ground_floors', pd.Series([0]*len(df))), errors='coerce').fillna(0)
     feature_df['total_area'] = np.log1p(pd.to_numeric(df.get('total_area', pd.Series([0]*len(df))), errors='coerce').fillna(0))
@@ -535,17 +701,18 @@ class RealTrainedModel:
         use_safe = getattr(self, '_use_safe_features', False)
         # 构造单样本 DataFrame（安全特征 + 材料用量估算）
         total_area = float(project.get("total_area", 10000))
+        _mat_coeffs = get_building_coefficients(project)["material"]
         sample = pd.DataFrame([{
             "建筑类型": project.get("project_type", "学校"),
             "结构类型": project.get("structure_type", "框架结构"),
-            "所在地区": project.get("location", "华东"),
+            "所在地区": normalize_region(project.get("location", "华东")),
             "装修标准": project.get("decoration_level", "普通装修"),
             "总建筑面积": total_area,
             "楼层数": int(project.get("floors", 6)),
             "建造年份": int(project.get("build_year", project.get("year", 2023))),
-            "混凝土总用量": float(project.get("concrete_total", total_area * 0.45)),
-            "钢筋总用量": float(project.get("steel_total", total_area * 0.055)),
-            "砌块总用量": float(project.get("block_total", total_area * 0.25)),
+            "混凝土总用量": float(project.get("concrete_total", total_area * _mat_coeffs["混凝土"])),
+            "钢筋总用量": float(project.get("steel_total", total_area * _mat_coeffs["钢筋"])),
+            "砌块总用量": float(project.get("block_total", total_area * _mat_coeffs["砌块"])),
         }])
         if use_tree:
             X = extract_tree_features(sample)
@@ -597,17 +764,18 @@ class TotalCostSVRModel(RealTrainedModel):
 
         # 构造单样本 DataFrame（安全特征 + 材料用量估算）
         total_area = float(project.get("total_area", 10000))
+        _mat_coeffs = get_building_coefficients(project)["material"]
         sample = pd.DataFrame([{
             "建筑类型": project.get("project_type", "学校"),
             "结构类型": project.get("structure_type", "框架结构"),
-            "所在地区": project.get("location", "华东"),
+            "所在地区": normalize_region(project.get("location", "华东")),
             "装修标准": project.get("decoration_level", "普通装修"),
             "总建筑面积": total_area,
             "楼层数": int(project.get("floors", 6)),
             "建造年份": int(project.get("build_year", project.get("year", 2023))),
-            "混凝土总用量": float(project.get("concrete_total", total_area * 0.45)),
-            "钢筋总用量": float(project.get("steel_total", total_area * 0.055)),
-            "砌块总用量": float(project.get("block_total", total_area * 0.25)),
+            "混凝土总用量": float(project.get("concrete_total", total_area * _mat_coeffs["混凝土"])),
+            "钢筋总用量": float(project.get("steel_total", total_area * _mat_coeffs["钢筋"])),
+            "砌块总用量": float(project.get("block_total", total_area * _mat_coeffs["砌块"])),
         }])
         X = extract_safe_features(sample)
         log_y_pred = float(self.pipeline.predict(X)[0])
@@ -953,17 +1121,18 @@ class SectionXGBModel(RealTrainedModel):
         if not self.is_ready():
             return {"error": f"模型 {self.info.model_id} 未训练", "model_id": self.info.model_id}
         total_area = float(project.get("total_area", 10000))
+        _mat_coeffs = get_building_coefficients(project)["material"]
         sample = pd.DataFrame([{
             "建筑类型": project.get("project_type", "学校"),
             "结构类型": project.get("structure_type", "框架结构"),
-            "所在地区": project.get("location", "华东"),
+            "所在地区": normalize_region(project.get("location", "华东")),
             "装修标准": project.get("decoration_level", "普通装修"),
             "总建筑面积": total_area,
             "楼层数": int(project.get("floors", 6)),
             "建造年份": int(project.get("build_year", project.get("year", 2023))),
-            "混凝土总用量": float(project.get("concrete_total", total_area * 0.45)),
-            "钢筋总用量": float(project.get("steel_total", total_area * 0.055)),
-            "砌块总用量": float(project.get("block_total", total_area * 0.25)),
+            "混凝土总用量": float(project.get("concrete_total", total_area * _mat_coeffs["混凝土"])),
+            "钢筋总用量": float(project.get("steel_total", total_area * _mat_coeffs["钢筋"])),
+            "砌块总用量": float(project.get("block_total", total_area * _mat_coeffs["砌块"])),
         }])
         X = extract_tree_features(sample)
         pred = self.pipeline.predict(X)[0]
@@ -1018,10 +1187,12 @@ class SubsectionXGBModel(RealTrainedModel):
         # Normalize division ratios to sum = 1.0 (consistent with prediction normalization)
         raw_sum = found_ratio + main_ratio + roof_ratio + wall_ratio
         raw_sum = raw_sum.replace(0, np.nan)
-        found_ratio = (found_ratio / raw_sum).fillna(0.15)
-        main_ratio = (main_ratio / raw_sum).fillna(0.45)
-        roof_ratio = (roof_ratio / raw_sum).fillna(0.08)
-        wall_ratio = (wall_ratio / raw_sum).fillna(0.12)
+        # 按建筑类型生成差异化默认值（替代固定默认值）
+        _default_div = df.apply(lambda row: get_building_coefficients(row.to_dict())["division"], axis=1, result_type='expand')
+        found_ratio = (found_ratio / raw_sum).fillna(_default_div["基础工程"])
+        main_ratio = (main_ratio / raw_sum).fillna(_default_div["主体结构"])
+        roof_ratio = (roof_ratio / raw_sum).fillna(_default_div["屋面工程"])
+        wall_ratio = (wall_ratio / raw_sum).fillna(_default_div["外墙工程"])
 
         y = pd.DataFrame({'基础占比': found_ratio, '主体占比': main_ratio, '屋面占比': roof_ratio, '外墙占比': wall_ratio})
         y = y[mask]
@@ -1085,17 +1256,18 @@ class SubsectionXGBModel(RealTrainedModel):
         if not self.is_ready():
             return {"error": f"模型 {self.info.model_id} 未训练", "model_id": self.info.model_id}
         total_area = float(project.get("total_area", 10000))
+        _mat_coeffs = get_building_coefficients(project)["material"]
         sample = pd.DataFrame([{
             "建筑类型": project.get("project_type", "学校"),
             "结构类型": project.get("structure_type", "框架结构"),
-            "所在地区": project.get("location", "华东"),
+            "所在地区": normalize_region(project.get("location", "华东")),
             "装修标准": project.get("decoration_level", "普通装修"),
             "总建筑面积": total_area,
             "楼层数": int(project.get("floors", 6)),
             "建造年份": int(project.get("build_year", project.get("year", 2023))),
-            "混凝土总用量": float(project.get("concrete_total", total_area * 0.45)),
-            "钢筋总用量": float(project.get("steel_total", total_area * 0.055)),
-            "砌块总用量": float(project.get("block_total", total_area * 0.25)),
+            "混凝土总用量": float(project.get("concrete_total", total_area * _mat_coeffs["混凝土"])),
+            "钢筋总用量": float(project.get("steel_total", total_area * _mat_coeffs["钢筋"])),
+            "砌块总用量": float(project.get("block_total", total_area * _mat_coeffs["砌块"])),
         }])
         X = extract_tree_features(sample)
         pred = self.pipeline.predict(X)[0]
@@ -1213,17 +1385,18 @@ class ItemXGBModel(RealTrainedModel):
         if not self.is_ready():
             return {"error": f"模型 {self.info.model_id} 未训练", "model_id": self.info.model_id}
         total_area = float(project.get("total_area", 10000))
+        _mat_coeffs = get_building_coefficients(project)["material"]
         sample = pd.DataFrame([{
             "建筑类型": project.get("project_type", "学校"),
             "结构类型": project.get("structure_type", "框架结构"),
-            "所在地区": project.get("location", "华东"),
+            "所在地区": normalize_region(project.get("location", "华东")),
             "装修标准": project.get("decoration_level", "普通装修"),
             "总建筑面积": total_area,
             "楼层数": int(project.get("floors", 6)),
             "建造年份": int(project.get("build_year", project.get("year", 2023))),
-            "混凝土总用量": float(project.get("concrete_total", total_area * 0.45)),
-            "钢筋总用量": float(project.get("steel_total", total_area * 0.055)),
-            "砌块总用量": float(project.get("block_total", total_area * 0.25)),
+            "混凝土总用量": float(project.get("concrete_total", total_area * _mat_coeffs["混凝土"])),
+            "钢筋总用量": float(project.get("steel_total", total_area * _mat_coeffs["钢筋"])),
+            "砌块总用量": float(project.get("block_total", total_area * _mat_coeffs["砌块"])),
         }])
         X = extract_tree_features(sample)
         pred = self.pipeline.predict(X)[0]
@@ -1333,17 +1506,18 @@ class IndicatorRFModel(RealTrainedModel):
         if not self.is_ready():
             return {"error": f"模型 {self.info.model_id} 未训练", "model_id": self.info.model_id}
         total_area = float(project.get("total_area", 10000))
+        _mat_coeffs = get_building_coefficients(project)["material"]
         sample = pd.DataFrame([{
             "建筑类型": project.get("project_type", "学校"),
             "结构类型": project.get("structure_type", "框架结构"),
-            "所在地区": project.get("location", "华东"),
+            "所在地区": normalize_region(project.get("location", "华东")),
             "装修标准": project.get("decoration_level", "普通装修"),
             "总建筑面积": total_area,
             "楼层数": int(project.get("floors", 6)),
             "建造年份": int(project.get("build_year", project.get("year", 2023))),
-            "混凝土总用量": float(project.get("concrete_total", total_area * 0.45)),
-            "钢筋总用量": float(project.get("steel_total", total_area * 0.055)),
-            "砌块总用量": float(project.get("block_total", total_area * 0.25)),
+            "混凝土总用量": float(project.get("concrete_total", total_area * _mat_coeffs["混凝土"])),
+            "钢筋总用量": float(project.get("steel_total", total_area * _mat_coeffs["钢筋"])),
+            "砌块总用量": float(project.get("block_total", total_area * _mat_coeffs["砌块"])),
         }])
         X = extract_tree_features(sample)
         pred = self.pipeline.predict(X)[0]
@@ -1813,7 +1987,7 @@ def predict_with_real_models(
         from terminology import BASE_UNIT_PRICE, STRUCTURE_COEFFICIENT, REGION_COST_INDEX
         base = BASE_UNIT_PRICE.get(project.get("project_type", "学校"), 3500)
         struct = STRUCTURE_COEFFICIENT.get(project.get("structure_type", "框架结构"), 1.0)
-        region = REGION_COST_INDEX.get(project.get("location", "华东"), 1.0)
+        region = REGION_COST_INDEX.get(normalize_region(project.get("location", "华东")), 1.0)
         fused_unit_price_raw = base * struct * region
         fused_unit_price_adjusted = fused_unit_price_raw * scale_factor
         fused_total = fused_unit_price_adjusted * total_area
@@ -1947,26 +2121,27 @@ def predict_with_real_models(
     result["material_consumption"] = material_consumption
     result["indicators"] = indicators
 
-    # 向后兼容：composition 字段（基于规范比例）
+    # 向后兼容：composition 字段（基于建筑类型差异化系数）
+    comp_coeffs = get_building_coefficients(project)["composition"]
+    # 根据装修标准微调
+    decoration = project.get("decoration_level", project.get("装修标准", "一般装修"))
+    if decoration == "精装修":
+        comp_coeffs["直接工程费"] += 0.03
+        comp_coeffs["间接费"] -= 0.02
+    elif decoration == "豪华装修":
+        comp_coeffs["直接工程费"] += 0.06
+        comp_coeffs["间接费"] -= 0.04
+
+    # 归一化确保总和=1.0
+    comp_total = sum(comp_coeffs.values())
+    comp_coeffs = {k: round(v / comp_total, 4) for k, v in comp_coeffs.items()}
+
     result["composition"] = {
-        "直接工程费": {
-            "ratio": 0.60, "amount": round(fused_total * 0.60, 2),
-            "items": [
-                {"name": "人工费", "ratio": 0.20, "amount": round(fused_total * 0.20, 2)},
-                {"name": "材料费", "ratio": 0.30, "amount": round(fused_total * 0.30, 2)},
-                {"name": "机械费", "ratio": 0.10, "amount": round(fused_total * 0.10, 2)},
-            ],
-        },
-        "间接费": {
-            "ratio": 0.15, "amount": round(fused_total * 0.15, 2),
-            "items": [
-                {"name": "企业管理费", "ratio": 0.08, "amount": round(fused_total * 0.08, 2)},
-                {"name": "规费", "ratio": 0.05, "amount": round(fused_total * 0.05, 2)},
-            ],
-        },
-        "利润": {"ratio": 0.07, "amount": round(fused_total * 0.07, 2), "items": []},
-        "税金": {"ratio": 0.04, "amount": round(fused_total * 0.04, 2), "items": []},
-        "其他": {"ratio": 0.14, "amount": round(fused_total * 0.14, 2), "items": []},
+        name: {
+            "ratio": round(ratio, 4),
+            "amount": round(fused_total * ratio, 2),
+        }
+        for name, ratio in comp_coeffs.items()
     }
 
     # ========== 保留原有辅助字段 ==========

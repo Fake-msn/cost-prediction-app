@@ -414,31 +414,67 @@
 /* Step 3 参数配置 */
 .param-tabs {
     display: flex;
-    gap: 6px;
+    gap: 8px;
     margin-bottom: 16px;
-    padding: 4px;
-    background: var(--bg-soft);
-    border-radius: var(--radius);
-    width: fit-content;
+    border-bottom: 2px solid #e5e7eb;
+    padding-bottom: 0;
 }
 .param-tab {
-    padding: 6px 14px;
-    border-radius: var(--radius-sm);
-    font-size: 13px;
-    color: var(--text-soft);
-    transition: all 0.15s;
+    padding: 8px 16px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    color: #6b7280;
+    font-size: 14px;
+    transition: all 0.2s;
+}
+.param-tab:hover {
+    color: #374151;
 }
 .param-tab.active {
-    background: var(--primary);
-    color: #fff;
+    color: #2563eb;
+    border-bottom-color: #2563eb;
+    font-weight: 600;
+}
+.param-panel {
+    min-height: 100px;
 }
 .param-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px 20px;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 16px;
     padding: 16px 0;
 }
 .param-grid .full { grid-column: 1 / -1; }
+.param-field label {
+    display: block;
+    font-size: 13px;
+    color: #374151;
+    margin-bottom: 4px;
+    font-weight: 500;
+}
+.param-field select,
+.param-field input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 14px;
+    background: white;
+    box-sizing: border-box;
+}
+.param-field select:focus,
+.param-field input:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+.no-params {
+    color: var(--text-soft);
+    font-size: 14px;
+    padding: 20px 0;
+    text-align: center;
+}
 .param-hint {
     background: var(--bg-soft);
     border: 1px solid var(--border);

@@ -135,6 +135,9 @@ class FeatureExtractor:
         )
         features.decoration_standard = self._extract_decoration(text)
 
+        # ---- 从表格行提取（label-value 对扫描）----
+        self._extract_fields_from_tables(tables, features, text)
+
         # ---- 从表格提取造价 ----
         features.total_cost, features.unit_price = self._extract_cost_from_tables(
             tables, features.total_area
@@ -257,6 +260,148 @@ class FeatureExtractor:
             if re.search(pattern, text):
                 return value
         return None
+
+    # ------------------------------------------------------------------
+    # 表格行 label-value 对提取（增强）
+    # ------------------------------------------------------------------
+
+    # 表格中常见字段标签 → 特征字段名 + 提取函数
+    TABLE_FIELD_LABELS = {
+        '建筑面积': 'total_area',
+        '总建筑面积': 'total_area',
+        '建筑总面积': 'total_area',
+        '占地面积': 'land_area',
+        '用地面积': 'land_area',
+        '楼层数': 'floor_count',
+        '总层数': 'floor_count',
+        '地上层数': 'above_ground_floors',
+        '地下层数': 'under_ground_floors',
+        '建造年份': 'build_year',
+        '建设年份': 'build_year',
+        '竣工年份': 'build_year',
+        '装修标准': 'decoration_standard',
+        '装修等级': 'decoration_standard',
+        '所在地区': 'location',
+        '建设地点': 'location',
+        '项目地点': 'location',
+        '结构类型': 'structure_type',
+        '建筑类型': 'building_type',
+        '工程类型': 'building_type',
+        '项目名称': 'project_name',
+        '工程名称': 'project_name',
+    }
+
+    def _extract_fields_from_tables(self, tables, features: ProjectFeatures, text: str):
+        """扫描表格行中的 label-value 对，补充文本提取遗漏的字段"""
+
+        for table in tables:
+            if not table:
+                continue
+            for row in table:
+                if not row or len(row) < 2:
+                    continue
+                # 将行拼接为文本，查找标签
+                row_text = ' '.join(str(c).strip() for c in row if c)
+
+                for label, field_name in self.TABLE_FIELD_LABELS.items():
+                    # 如果该字段已有值（从文本提取），跳过
+                    if getattr(features, field_name) is not None:
+                        continue
+
+                    # 在行中查找标签
+                    if self._fuzzy_contains(row_text, label):
+                        # 提取标签后的值
+                        value = self._extract_value_after_label(row, label)
+                        if value:
+                            parsed = self._parse_field_value(field_name, value)
+                            if parsed is not None:
+                                setattr(features, field_name, parsed)
+                                features.extraction_source[field_name] = 'table'
+                                features.confidence[field_name] = 0.85
+                                break
+
+    def _fuzzy_contains(self, text: str, keyword: str) -> bool:
+        """模糊包含检查：允许 1 个字符的 OCR 误差"""
+        if keyword in text:
+            return True
+        # 模糊匹配：检查关键词的每个字符是否在文本中按顺序出现（允许间隔 1-2 字符）
+        idx = 0
+        for ch in text:
+            if idx < len(keyword) and self._char_similar(ch, keyword[idx]):
+                idx += 1
+        return idx >= len(keyword) - 1  # 允许漏 1 个字
+
+    def _char_similar(self, a: str, b: str) -> bool:
+        """字符相似度：完全相同 或 常见 OCR 混淆对"""
+        if a == b:
+            return True
+        ocr_pairs = [('0', 'O'), ('1', 'l'), ('1', 'I'), ('2', 'Z'),
+                     ('5', 'S'), ('8', 'B'), ('㎡', 'm2'), ('层', '层'),
+                     ('：', ':'), ('，', ',')]
+        for p1, p2 in ocr_pairs:
+            if (a == p1 and b == p2) or (a == p2 and b == p1):
+                return True
+        return False
+
+    def _extract_value_after_label(self, row: List[str], label: str) -> Optional[str]:
+        """从表格行中提取标签后的值"""
+        for i, cell in enumerate(row):
+            cell_str = str(cell).strip()
+            if self._fuzzy_contains(cell_str, label):
+                # 值可能在同一单元格（label: value）或下一个单元格
+                # 情况1: "建筑面积: 69474" 在同一单元格
+                match = re.search(rf'{re.escape(label)}\s*[:：]\s*(.+)', cell_str)
+                if match:
+                    return match.group(1).strip()
+                # 情况2: 值在下一个单元格
+                if i + 1 < len(row):
+                    next_cell = str(row[i + 1]).strip()
+                    if next_cell and next_cell != label:
+                        return next_cell
+                # 情况3: 标签和值在同一单元格但用空格分隔
+                parts = cell_str.split()
+                if len(parts) >= 2:
+                    return parts[-1]
+        return None
+
+    def _parse_field_value(self, field_name: str, value: str):
+        """根据字段类型解析提取的值"""
+        value = value.strip()
+
+        if field_name in ('total_area', 'land_area'):
+            # 提取数字部分
+            match = re.search(r'(\d+(?:\.\d+)?)', value)
+            return float(match.group(1)) if match else None
+
+        elif field_name in ('floor_count', 'above_ground_floors',
+                            'under_ground_floors', 'build_year'):
+            match = re.search(r'(\d+)', value)
+            return int(match.group(1)) if match else None
+
+        elif field_name == 'structure_type':
+            for pattern, val in self.STRUCTURE_PATTERNS:
+                if re.search(pattern, value):
+                    return val
+            # 直接返回原文（可能是 OCR 乱码但仍有参考价值）
+            return value if len(value) <= 10 else None
+
+        elif field_name == 'building_type':
+            return self._match_building_type(value)
+
+        elif field_name == 'decoration_standard':
+            for pattern, val in self.DECORATION_PATTERNS:
+                if re.search(pattern, value):
+                    return val
+            return value if len(value) <= 10 else None
+
+        elif field_name == 'location':
+            for city in self.CITIES:
+                if city in value:
+                    return city
+            return value if len(value) <= 20 else None
+
+        else:
+            return value if value else None
 
     def _extract_project_name(self, filename: str, text: str) -> Optional[str]:
         """提取项目名称，文件名作为回退"""

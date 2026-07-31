@@ -168,7 +168,13 @@
                     </div>
                 </div>
                 <div class="chat-input-wrap">
-                    <textarea id="chat-input" placeholder="输入项目描述，例如：'预测 30000 平米北京办公楼造价'" rows="1"></textarea>
+                    <button class="btn-chat-attach" id="btn-chat-upload" title="上传项目文件（PDF/Word/Excel），AI 自动分析并预测" style="background:none;border:none;cursor:pointer;padding:6px 8px;color:var(--text-soft);border-radius:6px;transition:all 0.2s;flex-shrink:0;">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
+                            <path d="M15 7L8.5 13.5C7.5 14.5 6 14.5 5 13.5C4 12.5 4 11 5 10L11.5 3.5C12.2 2.8 13.3 2.8 14 3.5C14.7 4.2 14.7 5.3 14 6L7.5 12.5C7.2 12.8 6.7 12.8 6.4 12.5C6.1 12.2 6.1 11.7 6.4 11.4L12 5.8"/>
+                        </svg>
+                    </button>
+                    <input type="file" id="chat-file-upload" accept=".docx,.doc,.pdf,.xlsx,.xls" style="display:none;">
+                    <textarea id="chat-input" placeholder="输入项目描述，或点击左侧📎上传文件自动分析..." rows="1"></textarea>
                     <button class="btn-send" id="btn-send">
                         <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                             <path d="M3 10L17 3L10 17L9 11L3 10Z" fill="currentColor"/>

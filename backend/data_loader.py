@@ -32,6 +32,33 @@ OPTIONAL_FIELDS = [
     "混凝土总用量", "钢筋总用量", "砌块总用量"
 ]
 
+# ============================================================
+# 地区归一化 - 将省份/城市级别值映射为7个大区
+# 与 ml_models.py 中的映射保持一致
+# ============================================================
+_CITY_TO_REGION = {
+    "四川": "西南", "成都": "西南", "重庆": "西南", "广元": "西南", "昆明": "西南", "贵阳": "西南",
+    "贵州": "西南", "云南": "西南", "西藏": "西南",
+    "北京": "华北", "天津": "华北", "河北": "华北", "山西": "华北", "内蒙古": "华北",
+    "上海": "华东", "江苏": "华东", "浙江": "华东", "安徽": "华东", "福建": "华东",
+    "江西": "华东", "山东": "华东",
+    "广东": "华南", "广西": "华南", "海南": "华南", "深圳": "华南", "广州": "华南",
+    "湖北": "华中", "湖南": "华中", "河南": "华中", "武汉": "华中", "长沙": "华中", "郑州": "华中",
+    "陕西": "西北", "甘肃": "西北", "青海": "西北", "宁夏": "西北", "新疆": "西北", "西安": "西北",
+    "辽宁": "东北", "吉林": "东北", "黑龙江": "东北", "沈阳": "东北", "大连": "东北", "哈尔滨": "东北",
+}
+_VALID_REGIONS = {"华北", "华东", "华南", "华中", "西南", "西北", "东北"}
+
+
+def _normalize_region(location) -> str:
+    """将任意粒度地区值归一化为7个大区之一"""
+    if not location:
+        return "华东"
+    location = str(location).strip()
+    if location in _VALID_REGIONS:
+        return location
+    return _CITY_TO_REGION.get(location, "华东")
+
 
 class DataLoader:
     """训练数据加载器 - 支持 Excel 和 DuckDB 双存储"""
@@ -587,6 +614,14 @@ class DataLoader:
 
                 print(f"[to_dataframe] 已派生 建筑工程费/装饰工程费/安装工程费 (BOQ ratios: {arch_r:.3f}/{deco_r:.3f}/{inst_r:.3f})")
 
+            # 归一化地区：将省份/城市级别值（如四川/成都/广元）统一为7个大区
+            if '所在地区' in merged.columns:
+                before = merged['所在地区'].value_counts().to_dict()
+                merged['所在地区'] = merged['所在地区'].apply(_normalize_region)
+                after = merged['所在地区'].value_counts().to_dict()
+                if before != after:
+                    print(f"[to_dataframe] 地区归一化: {before} → {after}")
+
             print(f"[to_dataframe] 合并后总计 {len(merged)} 条记录, {len(merged.columns)} 列")
             return merged
         except Exception as e:
@@ -694,6 +729,14 @@ class DataLoader:
                     df['装饰工程费'] = tc * 0.14
                 if '安装工程费' not in df.columns:
                     df['安装工程费'] = tc * 0.14
+
+            # 归一化地区：将省份/城市级别值统一为7个大区
+            if '所在地区' in df.columns:
+                before = df['所在地区'].value_counts().to_dict()
+                df['所在地区'] = df['所在地区'].apply(_normalize_region)
+                after = df['所在地区'].value_counts().to_dict()
+                if before != after:
+                    print(f"[_load_duckdb_dataframe] 地区归一化: {before} → {after}")
 
             return df
         finally:

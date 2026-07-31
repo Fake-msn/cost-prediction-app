@@ -12,7 +12,6 @@ COST_STAGES: Dict[str, Dict] = {
         "description": "快速概览项目投资规模",
         "accuracy": "70-80%",
         "error_rate": "±20%",
-        "param_count": 7,
         "applicable": "项目前期可行性研究 / 投资决策参考",
         "basis": "类比估算 + 经验数据"
     },
@@ -21,7 +20,6 @@ COST_STAGES: Dict[str, Dict] = {
         "description": "初步设计阶段的成本测算",
         "accuracy": "80-90%",
         "error_rate": "±10%",
-        "param_count": 32,
         "applicable": "初步设计阶段 / 投资控制基准",
         "basis": "初步设计图纸 + 方案"
     },
@@ -30,7 +28,6 @@ COST_STAGES: Dict[str, Dict] = {
         "description": "施工图设计阶段的精确测算",
         "accuracy": "95%+",
         "error_rate": "±3%",
-        "param_count": 35,
         "applicable": "施工图设计 / 招投标与合同签订依据",
         "basis": "详细设计图纸 + 工程量清单"
     }
@@ -126,16 +123,88 @@ PRICING_METHODS: List[Dict] = [
     }
 ]
 
-# ===== 参数分类（估算阶段7参数 / 概算32参数 / 预算35参数）=====
-ESTIMATION_PARAMS = [
-    {"key": "project_type", "name": "建筑类型", "category": "基础参数", "type": "select", "options": [p["name"] for p in PROJECT_TYPES]},
-    {"key": "structure_type", "name": "结构类型", "category": "基础参数", "type": "select", "options": STRUCTURE_TYPES},
-    {"key": "total_area", "name": "总建筑面积", "category": "基础参数", "type": "number", "unit": "m²", "min": 100, "max": 1000000},
-    {"key": "floors", "name": "楼层数", "category": "基础参数", "type": "number", "unit": "层", "min": 1, "max": 200},
-    {"key": "location", "name": "所在地区", "category": "基础参数", "type": "select", "options": ["华北", "华东", "华南", "华中", "西南", "西北", "东北"]},
-    {"key": "build_year", "name": "建造年份", "category": "基础参数", "type": "number", "unit": "年", "min": 2020, "max": 2030},
-    {"key": "decoration_level", "name": "装修标准", "category": "基础参数", "type": "select", "options": ["简单装修", "普通装修", "精装修", "豪华装修"]}
-]
+# ===== 参数分类（估算阶段7参数 / 概算24参数 / 预算24参数）=====
+ESTIMATION_PARAMS = {
+    "基础参数": [
+        {"key": "project_type", "label": "建筑类型", "type": "select", "options": [p["name"] for p in PROJECT_TYPES]},
+        {"key": "structure_type", "label": "结构类型", "type": "select", "options": STRUCTURE_TYPES},
+        {"key": "total_area", "label": "总建筑面积(㎡)", "type": "number"},
+        {"key": "floors", "label": "楼层数", "type": "number"},
+        {"key": "location", "label": "所在地区", "type": "select", "options": ["华北", "华东", "华南", "华中", "西南", "西北", "东北"]},
+        {"key": "build_year", "label": "建造年份", "type": "number"},
+        {"key": "decoration_level", "label": "装修标准", "type": "select", "options": ["简单装修", "普通装修", "精装修", "豪华装修"]},
+    ],
+}
+
+PRELIMINARY_PARAMS = {
+    "基础参数": [
+        {"key": "total_area", "label": "总建筑面积(㎡)", "type": "number"},
+        {"key": "floors", "label": "地上楼层数", "type": "number"},
+        {"key": "basement_area", "label": "地下室面积(㎡)", "type": "number"},
+        {"key": "building_height", "label": "建筑高度(m)", "type": "number"},
+        {"key": "build_year", "label": "建造年份", "type": "number"},
+        {"key": "duration", "label": "工期(月)", "type": "number"},
+    ],
+    "结构参数": [
+        {"key": "foundation_type", "label": "基础形式", "type": "select", "options": ["独立基础", "筏板基础", "桩基础", "条形基础"]},
+        {"key": "seismic_grade", "label": "抗震等级", "type": "select", "options": ["一级", "二级", "三级", "四级"]},
+        {"key": "concrete_grade", "label": "混凝土等级", "type": "select", "options": ["C25", "C30", "C35", "C40", "C50"]},
+        {"key": "steel_grade", "label": "钢筋等级", "type": "select", "options": ["HRB335", "HRB400", "HRB500"]},
+        {"key": "soil_condition", "label": "地质条件", "type": "select", "options": ["良好", "一般", "较差", "复杂"]},
+        {"key": "special_equipment", "label": "特殊设备", "type": "select", "options": ["无", "少量", "较多", "大量"]},
+    ],
+    "系统参数": [
+        {"key": "hvac", "label": "暖通空调", "type": "select", "options": ["无", "分体空调", "中央空调", "多联机"]},
+        {"key": "elevator", "label": "电梯配置", "type": "select", "options": ["无", "普通客梯", "高速客梯", "观光梯"]},
+        {"key": "fire_system", "label": "消防系统", "type": "select", "options": ["基本", "标准", "高级", "特级"]},
+        {"key": "smart_building", "label": "智能化", "type": "select", "options": ["无", "基本", "标准", "高级"]},
+        {"key": "parking_ratio", "label": "车位配比(车位/百㎡)", "type": "number"},
+        {"key": "green_rating", "label": "绿色等级", "type": "select", "options": ["无", "一星", "二星", "三星"]},
+    ],
+    "装修参数": [
+        {"key": "decoration_level", "label": "装修标准", "type": "select", "options": ["毛坯", "一般装修", "精装修", "豪华装修"]},
+        {"key": "exterior_wall", "label": "外墙装饰", "type": "select", "options": ["涂料", "面砖", "石材", "幕墙"]},
+        {"key": "roof_type", "label": "屋面做法", "type": "select", "options": ["平屋面", "坡屋面", "种植屋面", "金属屋面"]},
+        {"key": "window_type", "label": "门窗类型", "type": "select", "options": ["塑钢", "断桥铝", "铝合金", "幕墙窗"]},
+        {"key": "elevator_count", "label": "电梯数量", "type": "number"},
+        {"key": "parking_count", "label": "车位数量", "type": "number"},
+    ],
+}
+
+BUDGET_PARAMS = {
+    "基础参数": [
+        {"key": "total_area", "label": "总建筑面积(㎡)", "type": "number"},
+        {"key": "floors", "label": "地上楼层数", "type": "number"},
+        {"key": "basement_area", "label": "地下室面积(㎡)", "type": "number"},
+        {"key": "building_height", "label": "建筑高度(m)", "type": "number"},
+        {"key": "build_year", "label": "建造年份", "type": "number"},
+        {"key": "duration", "label": "工期(月)", "type": "number"},
+    ],
+    "结构参数": [
+        {"key": "foundation_type", "label": "基础形式", "type": "select", "options": ["独立基础", "筏板基础", "桩基础", "条形基础"]},
+        {"key": "seismic_grade", "label": "抗震等级", "type": "select", "options": ["一级", "二级", "三级", "四级"]},
+        {"key": "concrete_grade", "label": "混凝土等级", "type": "select", "options": ["C25", "C30", "C35", "C40", "C50"]},
+        {"key": "steel_grade", "label": "钢筋等级", "type": "select", "options": ["HRB335", "HRB400", "HRB500"]},
+        {"key": "soil_condition", "label": "地质条件", "type": "select", "options": ["良好", "一般", "较差", "复杂"]},
+        {"key": "special_equipment", "label": "特殊设备", "type": "select", "options": ["无", "少量", "较多", "大量"]},
+    ],
+    "系统参数": [
+        {"key": "hvac", "label": "暖通空调", "type": "select", "options": ["无", "分体空调", "中央空调", "多联机"]},
+        {"key": "elevator", "label": "电梯配置", "type": "select", "options": ["无", "普通客梯", "高速客梯", "观光梯"]},
+        {"key": "fire_system", "label": "消防系统", "type": "select", "options": ["基本", "标准", "高级", "特级"]},
+        {"key": "smart_building", "label": "智能化", "type": "select", "options": ["无", "基本", "标准", "高级"]},
+        {"key": "parking_ratio", "label": "车位配比(车位/百㎡)", "type": "number"},
+        {"key": "green_rating", "label": "绿色等级", "type": "select", "options": ["无", "一星", "二星", "三星"]},
+    ],
+    "装修参数": [
+        {"key": "decoration_level", "label": "装修标准", "type": "select", "options": ["毛坯", "一般装修", "精装修", "豪华装修"]},
+        {"key": "exterior_wall", "label": "外墙装饰", "type": "select", "options": ["涂料", "面砖", "石材", "幕墙"]},
+        {"key": "roof_type", "label": "屋面做法", "type": "select", "options": ["平屋面", "坡屋面", "种植屋面", "金属屋面"]},
+        {"key": "window_type", "label": "门窗类型", "type": "select", "options": ["塑钢", "断桥铝", "铝合金", "幕墙窗"]},
+        {"key": "elevator_count", "label": "电梯数量", "type": "number"},
+        {"key": "parking_count", "label": "车位数量", "type": "number"},
+    ],
+}
 
 # ===== 地区造价指数（基于行业经验）=====
 REGION_COST_INDEX: Dict[str, float] = {
@@ -274,21 +343,17 @@ def get_stage_info(stage: str) -> Dict:
     return COST_STAGES.get(stage, {})
 
 
-def get_param_categories(stage: str) -> List[Dict]:
-    """获取参数分类"""
-    if stage == "estimation":
-        return [{"name": "基础参数", "count": 7, "params": ESTIMATION_PARAMS}]
-    elif stage == "preliminary":
-        return [
-            {"name": "基础参数", "count": 8, "params": []},
-            {"name": "结构参数", "count": 8, "params": []},
-            {"name": "系统参数", "count": 8, "params": []},
-            {"name": "装修参数", "count": 6, "params": []}
-        ]
-    else:  # budget
-        return [
-            {"name": "基础参数", "count": 8, "params": []},
-            {"name": "结构参数", "count": 8, "params": []},
-            {"name": "系统参数", "count": 10, "params": []},
-            {"name": "装修参数", "count": 9, "params": []}
-        ]
+def get_param_categories(stage: str = "estimation"):
+    """获取参数分类，动态从实际参数列表计算"""
+    params_map = {
+        "estimation": ESTIMATION_PARAMS,
+        "preliminary": PRELIMINARY_PARAMS,
+        "budget": BUDGET_PARAMS,
+    }
+    stage_params = params_map.get(stage, ESTIMATION_PARAMS)
+    categories = []
+    total = 0
+    for cat_name, param_list in stage_params.items():
+        categories.append({"name": cat_name, "count": len(param_list), "params": param_list})
+        total += len(param_list)
+    return {"categories": categories, "total": total}
