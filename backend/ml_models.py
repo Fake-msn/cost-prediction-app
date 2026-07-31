@@ -1015,6 +1015,14 @@ class SubsectionXGBModel(RealTrainedModel):
         roof_ratio = pd.to_numeric(df.get('屋面工程费', pd.Series([0]*len(df))), errors='coerce').fillna(0) / total_cost
         wall_ratio = pd.to_numeric(df.get('外墙工程费', pd.Series([0]*len(df))), errors='coerce').fillna(0) / total_cost
 
+        # Normalize division ratios to sum = 1.0 (consistent with prediction normalization)
+        raw_sum = found_ratio + main_ratio + roof_ratio + wall_ratio
+        raw_sum = raw_sum.replace(0, np.nan)
+        found_ratio = (found_ratio / raw_sum).fillna(0.15)
+        main_ratio = (main_ratio / raw_sum).fillna(0.45)
+        roof_ratio = (roof_ratio / raw_sum).fillna(0.08)
+        wall_ratio = (wall_ratio / raw_sum).fillna(0.12)
+
         y = pd.DataFrame({'基础占比': found_ratio, '主体占比': main_ratio, '屋面占比': roof_ratio, '外墙占比': wall_ratio})
         y = y[mask]
 
@@ -1340,6 +1348,10 @@ class IndicatorRFModel(RealTrainedModel):
         X = extract_tree_features(sample)
         pred = self.pipeline.predict(X)[0]
         indicators = {col: round(max(0, float(pred[i])), 4) for i, col in enumerate(self.OUTPUT_COLUMNS)}
+        # Normalize indicators to sum = 1.0
+        total = sum(indicators.values())
+        if total > 0:
+            indicators = {k: round(v / total, 4) for k, v in indicators.items()}
         return {
             "model_id": self.info.model_id, "model_name": self.info.name,
             "algorithm": self.info.algorithm, "accuracy": self.info.accuracy,
@@ -1903,6 +1915,31 @@ def predict_with_real_models(
                 individual_predictions["indicator_rf"] = {"error": str(e)}
     if not indicators:
         indicators = {"人工费占比": 0.20, "基础占比": 0.15, "主体占比": 0.40}
+
+    # ========== 防御性归一化：确保所有占比之和 = 1.0 ==========
+    # trade_composition 归一化
+    if trade_composition:
+        tc_total = sum(v.get("ratio", 0) for v in trade_composition.values())
+        if tc_total > 0 and abs(tc_total - 1.0) > 0.01:
+            for v in trade_composition.values():
+                v["ratio"] = round(v["ratio"] / tc_total, 4)
+            # 重新计算 amount
+            total_cost = result["fused_total_cost"]
+            if total_cost > 0:
+                for v in trade_composition.values():
+                    v["amount"] = round(total_cost * v["ratio"], 2)
+
+    # division_composition 归一化
+    if division_composition:
+        dc_total = sum(division_composition.values())
+        if dc_total > 0 and abs(dc_total - 1.0) > 0.01:
+            division_composition = {k: round(v / dc_total, 4) for k, v in division_composition.items()}
+
+    # indicators 归一化
+    if indicators:
+        ind_total = sum(indicators.values())
+        if ind_total > 0 and abs(ind_total - 1.0) > 0.01:
+            indicators = {k: round(v / ind_total, 4) for k, v in indicators.items()}
 
     # ========== 组装多维度结果 ==========
     result["trade_composition"] = trade_composition

@@ -7354,5 +7354,291 @@
       "predicted_at": "2026-07-31T11:55:46.464330"
     },
     "created_at": "2026-07-31T11:55:46.464330"
+  },
+  "PRJ20260731193723231": {
+    "id": "PRJ20260731193723231",
+    "input": {
+      "project_name": "测试项目",
+      "project_type": "住宅",
+      "structure_type": "框架结构",
+      "total_area": 50000.0,
+      "floors": 18,
+      "location": "四川",
+      "build_year": 2026,
+      "decoration_level": "普通装修",
+      "stage": "estimation",
+      "selected_models": [
+        "total_pso_svr",
+        "section_xgb",
+        "indicator_rf"
+      ],
+      "basement_area": 0,
+      "building_height": 0
+    },
+    "result": {
+      "project": {
+        "name": "测试项目",
+        "type": "住宅",
+        "structure": "框架结构",
+        "area": 50000.0,
+        "location": "四川"
+      },
+      "fused_unit_price": 2782.98,
+      "fused_total_cost": 139149000.0,
+      "average_accuracy": 60.7,
+      "model_count": 1,
+      "selected_models": [
+        "total_pso_svr",
+        "section_xgb",
+        "indicator_rf"
+      ],
+      "composition": {
+        "直接工程费": {
+          "ratio": 0.6,
+          "amount": 83489400.0,
+          "items": [
+            {
+              "name": "人工费",
+              "ratio": 0.2,
+              "amount": 27829800.0
+            },
+            {
+              "name": "材料费",
+              "ratio": 0.3,
+              "amount": 41744700.0
+            },
+            {
+              "name": "机械费",
+              "ratio": 0.1,
+              "amount": 13914900.0
+            }
+          ]
+        },
+        "间接费": {
+          "ratio": 0.15,
+          "amount": 20872350.0,
+          "items": [
+            {
+              "name": "企业管理费",
+              "ratio": 0.08,
+              "amount": 11131920.0
+            },
+            {
+              "name": "规费",
+              "ratio": 0.05,
+              "amount": 6957450.0
+            }
+          ]
+        },
+        "利润": {
+          "ratio": 0.07,
+          "amount": 9740430.0,
+          "items": []
+        },
+        "税金": {
+          "ratio": 0.04,
+          "amount": 5565960.0,
+          "items": []
+        },
+        "其他": {
+          "ratio": 0.14,
+          "amount": 19480860.0,
+          "items": []
+        }
+      },
+      "trade_composition": {
+        "建筑工程": {
+          "ratio": 0.6244,
+          "amount": 86884635.6
+        },
+        "装饰工程": {
+          "ratio": 0.1675,
+          "amount": 23307457.5
+        },
+        "安装工程": {
+          "ratio": 0.2081,
+          "amount": 28956906.9
+        }
+      },
+      "division_composition": {
+        "基础工程": 0.2143,
+        "主体结构": 0.5714,
+        "屋面工程": 0.0714,
+        "外墙工程": 0.1429
+      },
+      "material_consumption": {
+        "混凝土": {
+          "per_m2": 0.45,
+          "unit": "m³/m²",
+          "total": 22500.0
+        },
+        "钢筋": {
+          "per_m2": 55.0,
+          "unit": "kg/m²",
+          "total": 2750000.0
+        },
+        "砌块": {
+          "per_m2": 0.25,
+          "unit": "m³/m²",
+          "total": 12500.0
+        }
+      },
+      "indicators": {
+        "人工费占比": 0.2792,
+        "基础占比": 0.1743,
+        "主体占比": 0.5465
+      },
+      "fused_unit_price_raw": 2782.98,
+      "scale_factor": 1.0,
+      "scale_note": "标准规模项目，无需规模调整",
+      "individual_predictions": {
+        "total_pso_svr": {
+          "model_id": "total_pso_svr",
+          "model_name": "建筑安装_总造价_[通用]_[PSO-SVR]",
+          "algorithm": "SVR (PSO-tuned)",
+          "accuracy": 60.7,
+          "predicted_value": 2782.98,
+          "target_field": "单方造价",
+          "train_samples": 126,
+          "trained_at": "2026-07-31T11:38:51.792851"
+        },
+        "section_xgb": {
+          "model_id": "section_xgb",
+          "model_name": "分部工程_专业造价占比_[通用]_[XGBoost]",
+          "algorithm": "MultiOutput XGBoost",
+          "accuracy": 51.6,
+          "target_field": "专业造价占比",
+          "train_samples": 126,
+          "ratios": {
+            "建筑占比": 0.6244,
+            "装饰占比": 0.1675,
+            "安装占比": 0.2081
+          }
+        },
+        "indicator_rf": {
+          "model_id": "indicator_rf",
+          "model_name": "指标体系_经济技术指标_[通用]_[Random Forest]",
+          "algorithm": "MultiOutput Random Forest",
+          "accuracy": 60.3,
+          "target_field": "经济技术指标",
+          "train_samples": 126,
+          "indicators": {
+            "人工费占比": 0.2792,
+            "基础占比": 0.1743,
+            "主体占比": 0.5465
+          }
+        }
+      },
+      "training_backend": "scikit-learn + xgboost",
+      "confidence_interval": {
+        "lower": 2782.98,
+        "upper": 2782.98,
+        "level": "68%"
+      },
+      "reference_projects": [
+        {
+          "name": "毗河新居安置小区“古窑西苑”建设工程",
+          "building_type": "住宅",
+          "area": 46122.9,
+          "unit_price": 2052.06,
+          "source": "real_training_data.xlsx"
+        },
+        {
+          "name": "崇州市青年公苑二期保障性住房项目（2、3、4#楼）",
+          "building_type": "住宅",
+          "area": 59846.08,
+          "unit_price": 1500.0,
+          "source": "real_training_data.xlsx"
+        },
+        {
+          "name": "被执行人成都海诚房地产开发有限公司在建的位于邛崃市司马大道的“海诚-司马赋”工程项目未完工部分的工程造价",
+          "building_type": "住宅",
+          "area": 56447.36,
+          "unit_price": 1500.0,
+          "source": "real_training_data.xlsx"
+        }
+      ],
+      "reference_warning": "",
+      "model_evidence": {
+        "training_samples": 126,
+        "cv_r2_scores": {
+          "total_pso_svr_fold_0": 0.7393,
+          "total_pso_svr_fold_1": 0.8094,
+          "total_pso_svr_fold_2": 0.7713,
+          "total_pso_svr_fold_3": 0.3579,
+          "total_pso_svr_fold_4": 0.3578,
+          "section_xgb_建筑占比": 0.7408,
+          "section_xgb_装饰占比": 0.6156,
+          "section_xgb_安装占比": 0.1917,
+          "indicator_rf_人工费占比": 0.5235,
+          "indicator_rf_基础占比": 0.757,
+          "indicator_rf_主体占比": 0.53
+        },
+        "data_sufficiency_score": 80.0
+      },
+      "feature_importance": {
+        "cat__建筑类型_住宅": 0.0101,
+        "cat__建筑类型_公共建筑": 0.0001,
+        "cat__建筑类型_办公楼": 0.0,
+        "cat__建筑类型_医院": 0.0,
+        "cat__建筑类型_商业建筑": 0.0001,
+        "cat__建筑类型_基础设施": 0.0001,
+        "cat__建筑类型_学校": 0.0,
+        "cat__建筑类型_工业建筑": 0.0,
+        "cat__结构类型_剪力墙结构": 0.0,
+        "cat__结构类型_框剪结构": 0.0004,
+        "cat__结构类型_框架结构": 0.0014,
+        "cat__结构类型_砖混结构": 0.0,
+        "cat__结构类型_钢结构": 0.0003,
+        "cat__所在地区_东北": 0.0,
+        "cat__所在地区_华东": 0.0001,
+        "cat__所在地区_华中": 0.0,
+        "cat__所在地区_华北": 0.0003,
+        "cat__所在地区_华南": 0.0003,
+        "cat__所在地区_四川": 0.2473,
+        "cat__所在地区_广元": 0.0,
+        "cat__所在地区_成都": 0.0,
+        "cat__所在地区_西北": 0.0001,
+        "cat__所在地区_西南": 0.0002,
+        "cat__装修标准_一般装修": 0.0195,
+        "cat__装修标准_普通装修": 0.0003,
+        "cat__装修标准_简单装修": 0.0004,
+        "cat__装修标准_精装": 0.0,
+        "cat__装修标准_精装修": 0.0016,
+        "cat__装修标准_豪华装修": 0.0001,
+        "num__总建筑面积": 0.0248,
+        "num__楼层数": 0.0383,
+        "num__建造年份": 0.0015,
+        "num__混凝土总用量": 0.0321,
+        "num__钢筋总用量": 0.5965,
+        "num__砌块总用量": 0.0239
+      },
+      "data_sources": [
+        {
+          "source_file": "real_training_data.xlsx",
+          "description": "真实工程造价项目数据",
+          "sample_count": 46,
+          "source_type": "real"
+        },
+        {
+          "source_file": "sample_training_data.xlsx",
+          "description": "系统生成的均衡样本数据",
+          "sample_count": 80,
+          "source_type": "simulated"
+        }
+      ],
+      "stage": "estimation",
+      "stage_info": {
+        "name": "估算阶段",
+        "description": "快速概览项目投资规模",
+        "accuracy": "70-80%",
+        "error_rate": "±20%",
+        "param_count": 7,
+        "applicable": "项目前期可行性研究 / 投资决策参考",
+        "basis": "类比估算 + 经验数据"
+      },
+      "predicted_at": "2026-07-31T19:37:23.008086"
+    },
+    "created_at": "2026-07-31T19:37:23.012092"
   }
 }
