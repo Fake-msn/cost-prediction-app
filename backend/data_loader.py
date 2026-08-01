@@ -734,7 +734,7 @@ class DataLoader:
 
             # 将 above_ground_floors NULL 填充为 0
             if '楼层数' in df.columns:
-                df['楼层数'] = df['楼层数'].fillna(0).astype(int)
+                df['楼层数'] = df['楼层数'].fillna(1).astype(int).clip(lower=1)
             if '建造年份' in df.columns:
                 df['建造年份'] = df['建造年份'].fillna(2023).astype(int)
 
@@ -752,7 +752,8 @@ class DataLoader:
                         SELECT project_name, building_trade_cost, decoration_trade_cost,
                                installation_trade_cost, foundation_division_cost, main_structure_cost,
                                roofing_cost, exterior_wall_cost, part_item_cost, measure_cost,
-                               regulation_cost, tax_cost, labor_cost, foundation_type
+                               regulation_cost, tax_cost, labor_cost, foundation_type,
+                               concrete_grade, steel_grade
                         FROM project_cost_breakdown
                     """).fetchall()
                     bd_map = {}
@@ -771,13 +772,16 @@ class DataLoader:
                             '税金': row[11] or 0,
                             '人工费': row[12] if row[12] and row[12] > 0 else None,
                             '基础类型': row[13] if row[13] else None,
+                            '混凝土等级': row[14] if row[14] else None,
+                            '钢筋等级': row[15] if row[15] else None,
                         }
                     if bd_map:
                         for col_name in ['人工费', '措施费', '规费', '税金',
                                          '基础工程费', '主体结构费', '屋面工程费', '外墙工程费',
-                                         '建筑工程费', '装饰工程费', '安装工程费', '基础类型']:
+                                         '建筑工程费', '装饰工程费', '安装工程费', '基础类型',
+                                         '混凝土等级', '钢筋等级']:
                             if col_name not in df.columns:
-                                df[col_name] = 0.0
+                                df[col_name] = 0.0 if col_name not in ('基础类型', '混凝土等级', '钢筋等级') else None
                         for idx in df.index:
                             name = df.at[idx, '项目名称']
                             if name in bd_map:
@@ -856,6 +860,16 @@ class DataLoader:
                 after = df['所在地区'].value_counts().to_dict()
                 if before != after:
                     print(f"[_load_duckdb_dataframe] 地区归一化: {before} → {after}")
+
+            # 从所在地区推导设防烈度（归一化后，与 predict 路径一致）
+            try:
+                from ml_models import resolve_seismic_intensity
+                if '设防烈度' not in df.columns and '所在地区' in df.columns:
+                    df['设防烈度'] = df['所在地区'].apply(
+                        lambda x: resolve_seismic_intensity(str(x)) if pd.notna(x) else "7度"
+                    )
+            except ImportError:
+                pass
 
             return df
         finally:

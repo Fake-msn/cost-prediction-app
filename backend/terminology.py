@@ -132,7 +132,7 @@ ESTIMATION_PARAMS = {
         {"key": "floors", "label": "楼层数", "type": "number"},
         {"key": "location", "label": "所在地区", "type": "select", "options": ["华北", "华东", "华南", "华中", "西南", "西北", "东北"]},
         {"key": "build_year", "label": "建造年份", "type": "number"},
-        {"key": "decoration_level", "label": "装修标准", "type": "select", "options": ["简单装修", "普通装修", "精装修", "豪华装修"]},
+        {"key": "decoration_level", "label": "装修标准", "type": "select", "options": ["毛坯", "一般装修", "精装修", "豪华装修"]},
     ],
 }
 
@@ -147,7 +147,7 @@ PRELIMINARY_PARAMS = {
     ],
     "结构参数": [
         {"key": "foundation_type", "label": "基础形式", "type": "select", "options": ["独立基础", "筏板基础", "桩基础", "条形基础"]},
-        {"key": "seismic_grade", "label": "抗震等级", "type": "select", "options": ["一级", "二级", "三级", "四级"]},
+        {"key": "seismic_grade", "label": "抗震等级", "type": "select", "options": ["特一级", "一级", "二级", "三级", "四级"]},
         {"key": "concrete_grade", "label": "混凝土等级", "type": "select", "options": ["C25", "C30", "C35", "C40", "C50"]},
         {"key": "steel_grade", "label": "钢筋等级", "type": "select", "options": ["HRB335", "HRB400", "HRB500"]},
         {"key": "soil_condition", "label": "地质条件", "type": "select", "options": ["良好", "一般", "较差", "复杂"]},
@@ -182,7 +182,7 @@ BUDGET_PARAMS = {
     ],
     "结构参数": [
         {"key": "foundation_type", "label": "基础形式", "type": "select", "options": ["独立基础", "筏板基础", "桩基础", "条形基础"]},
-        {"key": "seismic_grade", "label": "抗震等级", "type": "select", "options": ["一级", "二级", "三级", "四级"]},
+        {"key": "seismic_grade", "label": "抗震等级", "type": "select", "options": ["特一级", "一级", "二级", "三级", "四级"]},
         {"key": "concrete_grade", "label": "混凝土等级", "type": "select", "options": ["C25", "C30", "C35", "C40", "C50"]},
         {"key": "steel_grade", "label": "钢筋等级", "type": "select", "options": ["HRB335", "HRB400", "HRB500"]},
         {"key": "soil_condition", "label": "地质条件", "type": "select", "options": ["良好", "一般", "较差", "复杂"]},

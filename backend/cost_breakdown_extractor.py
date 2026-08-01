@@ -262,10 +262,35 @@ def extract_labor_from_h13(ws) -> Optional[float]:
     return None
 
 
+def _concrete_price_to_grade(price: float) -> str:
+    """混凝土价格 → 等级反推（四川地区价格体系）"""
+    if price >= 450:
+        return "C50"
+    elif price >= 390:
+        return "C40"
+    elif price >= 350:
+        return "C35"
+    elif price >= 310:
+        return "C30"
+    else:
+        return "C25"
+
+
+def _steel_price_to_grade(price: float) -> str:
+    """钢筋价格 → 等级反推"""
+    if price >= 4500:
+        return "HRB500"
+    elif price >= 3700:
+        return "HRB400"
+    else:
+        return "HRB335"
+
+
 def extract_metadata_from_info_xlsx(project_dir: str) -> Dict[str, Optional[str]]:
     """从项目信息 Excel 提取结构化参数
 
     读取 项目信息.xlsx 的「项目基础信息」sheet，提取模型可用字段。
+    混凝土/钢筋等级通过价格反推（如 320元→C30）。
     """
     result = {
         'foundation_type': None,
@@ -273,6 +298,8 @@ def extract_metadata_from_info_xlsx(project_dir: str) -> Dict[str, Optional[str]
         'pile_foundation_type': None,
         'seismic_grade': None,
         'earthwork_difficulty': None,
+        'concrete_grade': None,
+        'steel_grade': None,
     }
     field_map = {
         '基础类别': 'foundation_type',
@@ -281,6 +308,9 @@ def extract_metadata_from_info_xlsx(project_dir: str) -> Dict[str, Optional[str]
         '抗震等级': 'seismic_grade',
         '土方处理难度': 'earthwork_difficulty',
     }
+    # 价格→等级映射
+    concrete_price = None
+    steel_price = None
 
     if not os.path.isdir(project_dir):
         return result
@@ -303,7 +333,23 @@ def extract_metadata_from_info_xlsx(project_dir: str) -> Dict[str, Optional[str]
                     val = str(row[1]).strip() if row[1] else None
                     if val and val.lower() not in ('none', '', '-', 'nan'):
                         result[field_map[key]] = val
+                if key == '混凝土价格' and row[1]:
+                    try:
+                        concrete_price = float(row[1])
+                    except (ValueError, TypeError):
+                        pass
+                if key == '钢筋价格' and row[1]:
+                    try:
+                        steel_price = float(row[1])
+                    except (ValueError, TypeError):
+                        pass
             wb.close()
+
+            # 价格反推等级
+            if concrete_price:
+                result['concrete_grade'] = _concrete_price_to_grade(concrete_price)
+            if steel_price:
+                result['steel_grade'] = _steel_price_to_grade(steel_price)
             break  # 找到一个就够了
         except Exception:
             pass
@@ -349,6 +395,8 @@ def process_project(excel_path: str, project_name: str) -> Dict:
     project_dir = os.path.dirname(excel_path)
     metadata = extract_metadata_from_info_xlsx(project_dir)
     result['foundation_type'] = metadata.get('foundation_type')
+    result['concrete_grade'] = metadata.get('concrete_grade')
+    result['steel_grade'] = metadata.get('steel_grade')
 
     try:
         wb = openpyxl.load_workbook(excel_path, read_only=True, data_only=True)
@@ -495,10 +543,18 @@ def ensure_cost_breakdown_table(db_path: str = None):
                 FOREIGN KEY (project_id) REFERENCES project_meta(project_id)
             )
         """)
-        # 迁移：为旧表补充 foundation_type 列
+        # 迁移：为旧表补充 missing columns
         conn.execute("""
             ALTER TABLE project_cost_breakdown
             ADD COLUMN IF NOT EXISTS foundation_type VARCHAR
+        """)
+        conn.execute("""
+            ALTER TABLE project_cost_breakdown
+            ADD COLUMN IF NOT EXISTS concrete_grade VARCHAR
+        """)
+        conn.execute("""
+            ALTER TABLE project_cost_breakdown
+            ADD COLUMN IF NOT EXISTS steel_grade VARCHAR
         """)
         conn.commit()
         return True
@@ -542,8 +598,9 @@ def insert_breakdown(db_path: str, project_id: str, data: Dict):
              roofing_cost, exterior_wall_cost, part_item_cost, measure_cost,
              regulation_cost, tax_cost, labor_cost, labor_source,
              foundation_type, extraction_date, source_file,
-             e2_count, f11_count, e3_count, h13_count, extraction_errors)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             e2_count, f11_count, e3_count, h13_count, extraction_errors,
+             concrete_grade, steel_grade)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, [
             project_id,
             data.get('project_name', ''),
@@ -567,7 +624,9 @@ def insert_breakdown(db_path: str, project_id: str, data: Dict):
             data.get('f11_arch_count', 0),
             data.get('e3_count', 0),
             data.get('h13_count', 0),
-            json.dumps(data.get('errors', []), ensure_ascii=False)
+            json.dumps(data.get('errors', []), ensure_ascii=False),
+            data.get('concrete_grade'),
+            data.get('steel_grade'),
         ])
         conn.commit()
     finally:

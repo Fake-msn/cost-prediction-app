@@ -25033,5 +25033,373 @@
       "predicted_at": "2026-07-31T23:34:35.393426"
     },
     "created_at": "2026-07-31T23:34:35.393426"
+  },
+  "PRJ20260801120101519": {
+    "id": "PRJ20260801120101519",
+    "input": {
+      "project_name": "品质善方（成都）酒店有限公司 7#、8#楼装饰工程",
+      "project_type": "商业建筑",
+      "structure_type": "钢结构",
+      "total_area": 18501.0,
+      "floors": 8,
+      "location": "西南",
+      "build_year": 2024,
+      "decoration_level": "豪华装修",
+      "stage": "preliminary",
+      "selected_models": [
+        "total_pso_svr",
+        "unit_gbt",
+        "section_xgb",
+        "item_xgb",
+        "indicator_rf"
+      ],
+      "basement_area": 3760.0,
+      "building_height": 36.0,
+      "foundation_type": "独立基础",
+      "seismic_grade": "一级",
+      "concrete_grade": "C35",
+      "steel_grade": "HRB400",
+      "soil_condition": "较差",
+      "special_equipment": "少量",
+      "hvac": "中央空调",
+      "elevator": "高速客梯",
+      "fire_system": "高级",
+      "smart_building": "标准",
+      "exterior_wall": "石材",
+      "roof_type": "种植屋面",
+      "window_type": "幕墙窗",
+      "duration": 48,
+      "parking_ratio": 0.0,
+      "green_rating": "一星",
+      "elevator_count": 6,
+      "parking_count": 80
+    },
+    "result": {
+      "project": {
+        "name": "品质善方（成都）酒店有限公司 7#、8#楼装饰工程",
+        "type": "商业建筑",
+        "structure": "钢结构",
+        "area": 18501.0,
+        "location": "西南"
+      },
+      "fused_unit_price": 7466.31,
+      "fused_total_cost": 138134149.46,
+      "average_accuracy": 72.2,
+      "model_count": 2,
+      "selected_models": [
+        "total_pso_svr",
+        "unit_gbt",
+        "section_xgb",
+        "item_xgb",
+        "indicator_rf"
+      ],
+      "composition": {
+        "直接工程费": {
+          "ratio": 0.6471,
+          "amount": 89386608.11
+        },
+        "间接费": {
+          "ratio": 0.1078,
+          "amount": 14890861.31
+        },
+        "利润": {
+          "ratio": 0.0686,
+          "amount": 9476002.65
+        },
+        "税金": {
+          "ratio": 0.0392,
+          "amount": 5414858.66
+        },
+        "其他": {
+          "ratio": 0.1373,
+          "amount": 18965818.72
+        }
+      },
+      "trade_composition": {
+        "建筑工程": {
+          "ratio": 0.5164,
+          "amount": 71332474.78
+        },
+        "装饰工程": {
+          "ratio": 0.2486,
+          "amount": 34340149.56
+        },
+        "安装工程": {
+          "ratio": 0.235,
+          "amount": 32461525.12
+        }
+      },
+      "division_composition": {
+        "基础工程": 0.2143,
+        "主体结构": 0.5714,
+        "屋面工程": 0.0714,
+        "外墙工程": 0.1429
+      },
+      "material_consumption": {
+        "混凝土": {
+          "per_m2": 0.3452,
+          "unit": "m³/m²",
+          "total": 6386.55
+        },
+        "钢筋": {
+          "per_m2": 0.07,
+          "unit": "kg/m²",
+          "total": 1295.07
+        },
+        "砌块": {
+          "per_m2": 0.2079,
+          "unit": "m³/m²",
+          "total": 3846.36
+        }
+      },
+      "indicators": {
+        "人工费占比": 0.282,
+        "基础占比": 0.1861,
+        "主体占比": 0.5319
+      },
+      "fused_unit_price_raw": 7466.31,
+      "scale_factor": 1.0,
+      "scale_note": "标准规模项目，无需规模调整",
+      "individual_predictions": {
+        "total_pso_svr": {
+          "model_id": "total_pso_svr",
+          "model_name": "建筑安装_总造价_[通用]_[PSO-SVR]",
+          "algorithm": "SVR (PSO-tuned)",
+          "accuracy": 70.5,
+          "predicted_value": 6519.86,
+          "target_field": "单方造价",
+          "train_samples": 126,
+          "trained_at": "2026-08-01T02:09:43.068843"
+        },
+        "unit_gbt": {
+          "model_id": "unit_gbt",
+          "model_name": "单位工程_(总造价/单方造价)_[通用]_[GBT]",
+          "algorithm": "Gradient Boosting Tree",
+          "accuracy": 74.0,
+          "predicted_value": 8367.99,
+          "target_field": "单方造价",
+          "train_samples": 126,
+          "trained_at": "2026-07-31T22:54:52.854573"
+        },
+        "section_xgb": {
+          "model_id": "section_xgb",
+          "model_name": "分部工程_专业造价占比_[通用]_[XGBoost]",
+          "algorithm": "MultiOutput XGBoost",
+          "accuracy": 76.2,
+          "target_field": "专业造价占比",
+          "train_samples": 126,
+          "ratios": {
+            "建筑占比": 0.5164,
+            "装饰占比": 0.2486,
+            "安装占比": 0.235
+          }
+        },
+        "item_xgb": {
+          "model_id": "item_xgb",
+          "model_name": "分项工程_材料单方耗量_[通用]_[XGBoost]",
+          "algorithm": "MultiOutput XGBoost",
+          "accuracy": 53.5,
+          "target_field": "材料单方耗量",
+          "train_samples": 126,
+          "consumption": {
+            "混凝土单方(m³/m²)": 0.3452,
+            "钢筋单方(kg/m²)": 0.07,
+            "砌块单方(m³/m²)": 0.2079
+          }
+        },
+        "indicator_rf": {
+          "model_id": "indicator_rf",
+          "model_name": "指标体系_经济技术指标_[通用]_[Random Forest]",
+          "algorithm": "MultiOutput Random Forest",
+          "accuracy": 58.0,
+          "target_field": "经济技术指标",
+          "train_samples": 126,
+          "indicators": {
+            "人工费占比": 0.282,
+            "基础占比": 0.1861,
+            "主体占比": 0.5319
+          }
+        }
+      },
+      "training_backend": "scikit-learn + xgboost",
+      "confidence_interval": {
+        "lower": 6704.67,
+        "upper": 8183.18,
+        "level": "68%"
+      },
+      "reference_projects": [
+        {
+          "name": "商业建筑华东2020年第060号项目",
+          "building_type": "商业建筑",
+          "area": 16846.0,
+          "unit_price": 11666.58,
+          "source": "sample_training_data.xlsx"
+        },
+        {
+          "name": "商业建筑东北2023年第057号项目",
+          "building_type": "商业建筑",
+          "area": 36300.0,
+          "unit_price": 5086.03,
+          "source": "sample_training_data.xlsx"
+        },
+        {
+          "name": "商业建筑东北2023年第053号项目",
+          "building_type": "商业建筑",
+          "area": 5150.0,
+          "unit_price": 8382.02,
+          "source": "sample_training_data.xlsx"
+        }
+      ],
+      "reference_warning": "",
+      "model_evidence": {
+        "training_samples": 126,
+        "cv_r2_scores": {
+          "total_pso_svr_fold_0": 0.769,
+          "total_pso_svr_fold_1": 0.7403,
+          "total_pso_svr_fold_2": 0.856,
+          "total_pso_svr_fold_3": 0.5113,
+          "total_pso_svr_fold_4": 0.6505,
+          "unit_gbt_fold_0": 0.8542,
+          "unit_gbt_fold_1": 0.7472,
+          "unit_gbt_fold_2": 0.8279,
+          "unit_gbt_fold_3": 0.572,
+          "unit_gbt_fold_4": 0.6985,
+          "section_xgb_建筑占比": 0.903,
+          "section_xgb_装饰占比": 0.8674,
+          "section_xgb_安装占比": 0.5171,
+          "item_xgb_混凝土单方": 0.5454,
+          "item_xgb_钢筋单方": 0.6306,
+          "item_xgb_砌块单方": 0.4277,
+          "indicator_rf_人工费占比": 0.5165,
+          "indicator_rf_基础占比": 0.7486,
+          "indicator_rf_主体占比": 0.4739
+        },
+        "data_sufficiency_score": 80.0
+      },
+      "feature_importance": {
+        "cat__建筑类型_住宅": 0.172,
+        "cat__建筑类型_公共建筑": 0.0362,
+        "cat__建筑类型_办公楼": 0.0419,
+        "cat__建筑类型_医院": 0.1155,
+        "cat__建筑类型_商业建筑": 0.0875,
+        "cat__建筑类型_基础设施": 0.1368,
+        "cat__建筑类型_学校": 0.0275,
+        "cat__建筑类型_工业建筑": 0.169,
+        "cat__结构类型_剪力墙结构": 0.0015,
+        "cat__结构类型_框剪结构": 0.0117,
+        "cat__结构类型_框架结构": 0.0039,
+        "cat__结构类型_砖混结构": 0.0015,
+        "cat__结构类型_钢结构": 0.0009,
+        "cat__所在地区_东北": 0.0024,
+        "cat__所在地区_华东": 0.0095,
+        "cat__所在地区_华中": 0.0012,
+        "cat__所在地区_华北": 0.0015,
+        "cat__所在地区_华南": 0.0051,
+        "cat__所在地区_西北": 0.0048,
+        "cat__所在地区_西南": 0.0073,
+        "cat__装修标准_未知": 0.0012,
+        "cat__装修标准_精装修": 0.0014,
+        "cat__基础类型_未知": 0.0006,
+        "cat__基础类型_桩基础": 0.0021,
+        "cat__基础类型_桩基础、筏板基础": 0.0002,
+        "cat__基础类型_独基加筏板基础": 0.0005,
+        "cat__基础类型_独立基础、筏板基础": 0.0006,
+        "cat__基础类型_筏板基础": 0.0018,
+        "cat__基础类型_筏板基础独立基础": 0.0018,
+        "num__总建筑面积": 0.029,
+        "num__楼层数": 0.0048,
+        "num__建造年份": 0.0132,
+        "num__混凝土总用量": 0.0315,
+        "num__钢筋总用量": 0.0337,
+        "num__砌块总用量": 0.04
+      },
+      "data_sources": [
+        {
+          "source_file": "real_training_data.xlsx",
+          "description": "真实工程造价项目数据",
+          "sample_count": 46,
+          "source_type": "real"
+        },
+        {
+          "source_file": "sample_training_data.xlsx",
+          "description": "系统生成的均衡样本数据",
+          "sample_count": 80,
+          "source_type": "simulated"
+        }
+      ],
+      "confidence": {
+        "overall": {
+          "effective_accuracy": 72.8,
+          "base_accuracy": 72.2,
+          "total_bonus": 6.4
+        },
+        "per_model": {
+          "total_pso_svr": {
+            "base_accuracy": 70.5,
+            "input_bonus": 0.0,
+            "effective_accuracy": 70.5,
+            "max_potential_bonus": 0.0,
+            "breakdown": {},
+            "filled_params": 0,
+            "total_params": 0
+          },
+          "unit_gbt": {
+            "base_accuracy": 74.0,
+            "input_bonus": 0.0,
+            "effective_accuracy": 74.0,
+            "max_potential_bonus": 0.0,
+            "breakdown": {},
+            "filled_params": 0,
+            "total_params": 0
+          },
+          "section_xgb": {
+            "base_accuracy": 76.2,
+            "input_bonus": 16.0,
+            "effective_accuracy": 92.2,
+            "max_potential_bonus": 16,
+            "breakdown": {
+              "foundation_type": 8,
+              "seismic_grade": 5,
+              "soil_condition": 3
+            },
+            "filled_params": 3,
+            "total_params": 3
+          },
+          "item_xgb": {
+            "base_accuracy": 53.5,
+            "input_bonus": 16.0,
+            "effective_accuracy": 69.5,
+            "max_potential_bonus": 16,
+            "breakdown": {
+              "seismic_grade": 8,
+              "foundation_type": 5,
+              "soil_condition": 3
+            },
+            "filled_params": 3,
+            "total_params": 3
+          },
+          "indicator_rf": {
+            "base_accuracy": 58.0,
+            "input_bonus": 0.0,
+            "effective_accuracy": 58.0,
+            "max_potential_bonus": 0.0,
+            "breakdown": {},
+            "filled_params": 0,
+            "total_params": 0
+          }
+        }
+      },
+      "stage": "preliminary",
+      "stage_info": {
+        "name": "概算阶段",
+        "description": "初步设计阶段的成本测算",
+        "accuracy": "80-90%",
+        "error_rate": "±10%",
+        "applicable": "初步设计阶段 / 投资控制基准",
+        "basis": "初步设计图纸 + 方案"
+      },
+      "predicted_at": "2026-08-01T12:01:01.290854"
+    },
+    "created_at": "2026-08-01T12:01:01.305978"
   }
 }

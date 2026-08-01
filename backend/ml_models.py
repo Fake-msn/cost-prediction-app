@@ -162,12 +162,12 @@ NUMERIC_FEATURES = [
 
 
 # 树模型专用：安全输入特征（建造前已知 + 设计阶段材料估算）
-TREE_CATEGORICAL = ["建筑类型", "结构类型", "所在地区", "装修标准", "基础类型"]
+TREE_CATEGORICAL = ["建筑类型", "结构类型", "所在地区", "装修标准", "基础类型", "设防烈度", "混凝土等级", "钢筋等级"]
 TREE_NUMERIC = ["总建筑面积", "楼层数", "建造年份", "混凝土总用量", "钢筋总用量", "砌块总用量"]
 TREE_LOG1P_FEATURES = ["混凝土总用量", "钢筋总用量", "砌块总用量"]
 
 # 安全特征集：建造前已知参数 + 设计阶段材料用量估算（非费用输出）
-SAFE_CATEGORICAL = ["建筑类型", "结构类型", "所在地区", "装修标准"]
+SAFE_CATEGORICAL = ["建筑类型", "结构类型", "所在地区", "装修标准", "设防烈度"]
 SAFE_NUMERIC = ["总建筑面积", "楼层数", "建造年份", "混凝土总用量", "钢筋总用量", "砌块总用量"]
 SAFE_LOG1P_FEATURES = ["混凝土总用量", "钢筋总用量", "砌块总用量"]
 
@@ -377,11 +377,85 @@ def build_tree_preprocessor() -> ColumnTransformer:
     )
 
 
+def resolve_seismic_intensity(location: str) -> str:
+    """根据城市/地区名查找设防烈度（GB 18306 区划图）
+
+    优先级：精确城市匹配 → 区域默认值 → "7度"
+    """
+    if not location or pd.isna(location):
+        return "7度"
+
+    # 懒加载
+    if not hasattr(resolve_seismic_intensity, "_map"):
+        resolve_seismic_intensity._map = {}
+        try:
+            import json, os
+            _path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                 "seismic_intensity_map.json")
+            with open(_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            resolve_seismic_intensity._map = data.get("mapping", {})
+            resolve_seismic_intensity._region_defaults = data.get("region_defaults", {})
+        except Exception:
+            resolve_seismic_intensity._map = {}
+            resolve_seismic_intensity._region_defaults = {}
+
+    loc_str = str(location).strip()
+    _map = resolve_seismic_intensity._map
+    _region_defaults = resolve_seismic_intensity._region_defaults
+
+    # 精确匹配
+    if loc_str in _map:
+        return f"{_map[loc_str]}度"
+
+    # 子串匹配（如"成都市新都区" → "成都"）
+    for city in sorted(_map.keys(), key=len, reverse=True):
+        if city in loc_str:
+            return f"{_map[city]}度"
+
+    # 区域默认值
+    if loc_str in _region_defaults:
+        return f"{_region_defaults[loc_str]}度"
+
+    # 省级匹配
+    for region in ["西南", "华北", "华东", "华南", "华中", "西北", "东北"]:
+        if region in loc_str:
+            return f"{_region_defaults.get(region, 7)}度"
+
+    return "7度"
+
+
+# 装饰标准：向导选项 → 训练数据兼容值映射
+_DECORATION_MAP = {
+    "毛坯": "简单装修",
+    "一般装修": "普通装修",
+    "精装修": "精装修",
+    "豪华装修": "豪华装修",
+}
+_DECORATION_MAP.update({v: v for v in ["简单装修", "普通装修", "精装修", "豪华装修"]})
+# 训练时实际用过的值，都保留不变，只映射向导新值
+_DECORATION_MAP_KEEP = set(["简单装修", "普通装修", "精装修", "豪华装修",
+                             "未知", "nan", "None", "NULL"])
+
+
+def normalize_decoration_level(val: str) -> str:
+    """将向导输入的装饰标准映射为训练数据中的兼容值"""
+    if not val or str(val).lower() in ("none", "nan", "null"):
+        return "普通装修"
+    return _DECORATION_MAP.get(str(val).strip(), "普通装修")
+
+
 def extract_tree_features(df: pd.DataFrame) -> pd.DataFrame:
     """提取树模型输入特征（安全特征 + log1p材料用量）"""
     feature_df = pd.DataFrame()
     for col in TREE_CATEGORICAL:
-        feature_df[col] = df[col].fillna("未知").astype(str) if col in df.columns else "未知"
+        if col == "设防烈度" and col not in df.columns and "所在地区" in df.columns:
+            # 从所在地区自动推导设防烈度
+            feature_df[col] = df["所在地区"].apply(lambda x: resolve_seismic_intensity(str(x)))
+        elif col in df.columns:
+            feature_df[col] = df[col].fillna("未知").astype(str)
+        else:
+            feature_df[col] = "未知"
     for col in TREE_NUMERIC:
         if col in df.columns:
             vals = pd.to_numeric(df[col], errors="coerce").fillna(0)
@@ -708,7 +782,10 @@ class RealTrainedModel:
             "建筑类型": project.get("project_type", "学校"),
             "结构类型": project.get("structure_type", "框架结构"),
             "所在地区": normalize_region(project.get("location", "华东")),
-            "装修标准": project.get("decoration_level", "普通装修"),
+            "装修标准": normalize_decoration_level(project.get("decoration_level", "普通装修")),
+            "基础类型": project.get("foundation_type", "未知"),
+            "混凝土等级": project.get("concrete_grade", "未知"),
+            "钢筋等级": project.get("steel_grade", "未知"),
             "总建筑面积": total_area,
             "楼层数": int(project.get("floors", 6)),
             "建造年份": int(project.get("build_year", project.get("year", 2023))),
@@ -771,7 +848,10 @@ class TotalCostSVRModel(RealTrainedModel):
             "建筑类型": project.get("project_type", "学校"),
             "结构类型": project.get("structure_type", "框架结构"),
             "所在地区": normalize_region(project.get("location", "华东")),
-            "装修标准": project.get("decoration_level", "普通装修"),
+            "装修标准": normalize_decoration_level(project.get("decoration_level", "普通装修")),
+            "基础类型": project.get("foundation_type", "未知"),
+            "混凝土等级": project.get("concrete_grade", "未知"),
+            "钢筋等级": project.get("steel_grade", "未知"),
             "总建筑面积": total_area,
             "楼层数": int(project.get("floors", 6)),
             "建造年份": int(project.get("build_year", project.get("year", 2023))),
@@ -1128,7 +1208,10 @@ class SectionXGBModel(RealTrainedModel):
             "建筑类型": project.get("project_type", "学校"),
             "结构类型": project.get("structure_type", "框架结构"),
             "所在地区": normalize_region(project.get("location", "华东")),
-            "装修标准": project.get("decoration_level", "普通装修"),
+            "装修标准": normalize_decoration_level(project.get("decoration_level", "普通装修")),
+            "基础类型": project.get("foundation_type", "未知"),
+            "混凝土等级": project.get("concrete_grade", "未知"),
+            "钢筋等级": project.get("steel_grade", "未知"),
             "总建筑面积": total_area,
             "楼层数": int(project.get("floors", 6)),
             "建造年份": int(project.get("build_year", project.get("year", 2023))),
@@ -1263,7 +1346,10 @@ class SubsectionXGBModel(RealTrainedModel):
             "建筑类型": project.get("project_type", "学校"),
             "结构类型": project.get("structure_type", "框架结构"),
             "所在地区": normalize_region(project.get("location", "华东")),
-            "装修标准": project.get("decoration_level", "普通装修"),
+            "装修标准": normalize_decoration_level(project.get("decoration_level", "普通装修")),
+            "基础类型": project.get("foundation_type", "未知"),
+            "混凝土等级": project.get("concrete_grade", "未知"),
+            "钢筋等级": project.get("steel_grade", "未知"),
             "总建筑面积": total_area,
             "楼层数": int(project.get("floors", 6)),
             "建造年份": int(project.get("build_year", project.get("year", 2023))),
@@ -1392,7 +1478,10 @@ class ItemXGBModel(RealTrainedModel):
             "建筑类型": project.get("project_type", "学校"),
             "结构类型": project.get("structure_type", "框架结构"),
             "所在地区": normalize_region(project.get("location", "华东")),
-            "装修标准": project.get("decoration_level", "普通装修"),
+            "装修标准": normalize_decoration_level(project.get("decoration_level", "普通装修")),
+            "基础类型": project.get("foundation_type", "未知"),
+            "混凝土等级": project.get("concrete_grade", "未知"),
+            "钢筋等级": project.get("steel_grade", "未知"),
             "总建筑面积": total_area,
             "楼层数": int(project.get("floors", 6)),
             "建造年份": int(project.get("build_year", project.get("year", 2023))),
@@ -1513,7 +1602,10 @@ class IndicatorRFModel(RealTrainedModel):
             "建筑类型": project.get("project_type", "学校"),
             "结构类型": project.get("structure_type", "框架结构"),
             "所在地区": normalize_region(project.get("location", "华东")),
-            "装修标准": project.get("decoration_level", "普通装修"),
+            "装修标准": normalize_decoration_level(project.get("decoration_level", "普通装修")),
+            "基础类型": project.get("foundation_type", "未知"),
+            "混凝土等级": project.get("concrete_grade", "未知"),
+            "钢筋等级": project.get("steel_grade", "未知"),
             "总建筑面积": total_area,
             "楼层数": int(project.get("floors", 6)),
             "建造年份": int(project.get("build_year", project.get("year", 2023))),

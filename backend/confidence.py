@@ -45,9 +45,26 @@ class ConfidenceEngine:
 
     # 向导参数名 → 多个可能的参数名映射（处理前端/后端命名差异）
     PARAM_ALIASES: Dict[str, List[str]] = {
-        "foundation_type": ["foundation_type", "基础形式", "基础类型", "基础类别"],
-        "seismic_grade":   ["seismic_grade", "抗震等级"],
-        "soil_condition":  ["soil_condition", "地质条件", "土质条件"],
+        "foundation_type":    ["foundation_type", "基础形式", "基础类型", "基础类别"],
+        "seismic_grade":      ["seismic_grade", "抗震等级"],
+        "soil_condition":     ["soil_condition", "地质条件", "土质条件"],
+        "basement_area":      ["basement_area", "地下室面积"],
+        "building_height":    ["building_height", "建筑高度"],
+        "duration":           ["duration", "工期"],
+        "special_equipment":  ["special_equipment", "特殊设备"],
+        "hvac":               ["hvac", "暖通空调"],
+        "elevator":           ["elevator", "电梯配置"],
+        "fire_system":        ["fire_system", "消防系统"],
+        "smart_building":     ["smart_building", "智能化"],
+        "parking_ratio":      ["parking_ratio", "车位配比"],
+        "green_rating":       ["green_rating", "绿色等级"],
+        "exterior_wall":      ["exterior_wall", "外墙装饰"],
+        "roof_type":          ["roof_type", "屋面做法"],
+        "window_type":        ["window_type", "门窗类型"],
+        "elevator_count":     ["elevator_count", "电梯数量"],
+        "parking_count":      ["parking_count", "车位数量"],
+        "concrete_grade":     ["concrete_grade", "混凝土等级"],
+        "steel_grade":        ["steel_grade", "钢筋等级"],
     }
 
     def __init__(self, config_path: str = None):

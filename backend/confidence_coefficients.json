@@ -1,20 +1,24 @@
 {
-  "version": "1.0",
-  "description": "动态置信度引擎配置 — bonus_rules 定义向导参数对模型可信度的贡献，empirical_correction 定义经验系数对预测值的修正",
+  "version": "1.1",
+  "description": "动态置信度引擎配置 v1.1 — 扩展覆盖全部 24 个向导参数",
   "models": {
     "subsection_xgb": {
       "bonus_rules": {
-        "foundation_type": {"bonus": 15, "description": "基础形式直接影响基础工程造价占比"},
-        "seismic_grade":   {"bonus": 5,  "description": "抗震等级影响结构配筋和材料强度"},
-        "soil_condition":  {"bonus": 5,  "description": "地质条件影响地基处理方案和土方量"}
+        "foundation_type":    {"bonus": 15, "description": "基础形式直接影响基础工程造价占比"},
+        "seismic_grade":      {"bonus": 5,  "description": "抗震等级影响结构配筋和材料强度"},
+        "soil_condition":     {"bonus": 5,  "description": "地质条件影响地基处理方案和土方量"},
+        "basement_area":      {"bonus": 3,  "description": "地下室面积影响基础埋深和土方量"},
+        "building_height":    {"bonus": 4,  "description": "建筑高度影响结构选型和抗震构造"},
+        "special_equipment":  {"bonus": 2,  "description": "特殊设备影响基础承载要求"},
+        "green_rating":       {"bonus": 2,  "description": "绿色等级影响围护结构标准"}
       },
-      "max_bonus": 25,
+      "max_bonus": 36,
       "empirical_correction": {
         "foundation_type": {
-          "独立基础":       {"基础占比": 0.85},
-          "筏板基础":       {"基础占比": 1.10},
-          "桩基础":         {"基础占比": 1.35},
-          "条形基础":       {"基础占比": 0.90},
+          "独立基础":           {"基础占比": 0.85},
+          "筏板基础":           {"基础占比": 1.10},
+          "桩基础":             {"基础占比": 1.35},
+          "条形基础":           {"基础占比": 0.90},
           "独立基础、筏板基础": {"基础占比": 1.00},
           "桩基础、筏板基础":   {"基础占比": 1.25}
         },
@@ -28,32 +32,76 @@
     },
     "section_xgb": {
       "bonus_rules": {
-        "foundation_type": {"bonus": 8,  "description": "基础形式影响建筑工程与装饰工程的划分"},
-        "seismic_grade":   {"bonus": 5,  "description": "抗震等级影响建筑结构复杂度"},
-        "soil_condition":  {"bonus": 3,  "description": "地质影响基础设计复杂度"}
+        "foundation_type":   {"bonus": 8,  "description": "基础形式影响建筑工程与装饰工程的划分"},
+        "seismic_grade":     {"bonus": 5,  "description": "抗震等级影响建筑结构复杂度"},
+        "soil_condition":    {"bonus": 3,  "description": "地质影响基础设计复杂度"},
+        "hvac":              {"bonus": 5,  "description": "暖通空调形式直接影响安装工程造价占比"},
+        "elevator":          {"bonus": 4,  "description": "电梯配置影响安装工程造价"},
+        "fire_system":       {"bonus": 4,  "description": "消防系统等级影响安装投入"},
+        "smart_building":    {"bonus": 3,  "description": "智能化程度影响弱电安装费用"},
+        "exterior_wall":     {"bonus": 4,  "description": "外墙装饰做法影响装饰工程造价"},
+        "roof_type":         {"bonus": 3,  "description": "屋面做法影响建筑工程造价"},
+        "window_type":       {"bonus": 3,  "description": "门窗类型影响装饰工程造价"},
+        "green_rating":      {"bonus": 2,  "description": "绿色建筑等级影响各专业造价比例"},
+        "building_height":   {"bonus": 3,  "description": "建筑高度影响专业工程划分"},
+        "special_equipment": {"bonus": 2,  "description": "特殊设备增加安装工程占比"}
       },
-      "max_bonus": 16,
+      "max_bonus": 49,
       "empirical_correction": {
         "foundation_type": {
           "桩基础":   {"建筑占比": 1.05},
           "筏板基础": {"建筑占比": 1.03},
           "独立基础": {"建筑占比": 0.98}
+        },
+        "hvac": {
+          "中央空调": {"安装占比": 1.25},
+          "多联机":  {"安装占比": 1.15},
+          "分体空调": {"安装占比": 1.05},
+          "无":      {"安装占比": 0.85}
+        },
+        "exterior_wall": {
+          "幕墙": {"装饰占比": 1.30},
+          "石材": {"装饰占比": 1.15},
+          "面砖": {"装饰占比": 1.00},
+          "涂料": {"装饰占比": 0.85}
         }
       }
     },
     "item_xgb": {
       "bonus_rules": {
-        "seismic_grade":   {"bonus": 8,  "description": "抗震等级直接影响混凝土和钢筋用量"},
-        "foundation_type": {"bonus": 5,  "description": "基础形式影响材料耗量"},
-        "soil_condition":  {"bonus": 3,  "description": "地质影响基础材料用量"}
+        "seismic_grade":     {"bonus": 8,  "description": "抗震等级直接影响混凝土和钢筋用量"},
+        "foundation_type":   {"bonus": 5,  "description": "基础形式影响材料耗量"},
+        "soil_condition":    {"bonus": 3,  "description": "地质影响基础材料用量"},
+        "duration":          {"bonus": 3,  "description": "工期长短影响施工措施和模板周转"},
+        "special_equipment": {"bonus": 3,  "description": "特殊设备增加材料和施工难度"},
+        "building_height":   {"bonus": 4,  "description": "高度影响混凝土泵送和钢筋连接"},
+        "green_rating":      {"bonus": 2,  "description": "绿色等级影响材料选择和用量"},
+        "hvac":              {"bonus": 2,  "description": "暖通形式影响楼板厚度和材料"},
+        "exterior_wall":     {"bonus": 2,  "description": "外墙做法影响砌块和砂浆用量"},
+        "roof_type":         {"bonus": 2,  "description": "屋面做法影响混凝土和防水材料"},
+        "concrete_grade":    {"bonus": 3,  "description": "混凝土等级差异影响单方用量"},
+        "steel_grade":       {"bonus": 3,  "description": "钢筋等级差异影响配筋率"}
       },
-      "max_bonus": 16,
+      "max_bonus": 40,
       "empirical_correction": {
         "seismic_grade": {
-          "一级": {"混凝土总用量": 1.12, "钢筋总用量": 1.15},
-          "二级": {"混凝土总用量": 1.06, "钢筋总用量": 1.08},
-          "三级": {"混凝土总用量": 1.00, "钢筋总用量": 1.00},
-          "四级": {"混凝土总用量": 0.95, "钢筋总用量": 0.93}
+          "特一级": {"混凝土总用量": 1.18, "钢筋总用量": 1.25},
+          "一级":   {"混凝土总用量": 1.12, "钢筋总用量": 1.15},
+          "二级":   {"混凝土总用量": 1.06, "钢筋总用量": 1.08},
+          "三级":   {"混凝土总用量": 1.00, "钢筋总用量": 1.00},
+          "四级":   {"混凝土总用量": 0.95, "钢筋总用量": 0.93}
+        },
+        "exterior_wall": {
+          "幕墙": {"砌块总用量": 0.70},
+          "石材": {"砌块总用量": 0.85},
+          "面砖": {"砌块总用量": 0.95},
+          "涂料": {"砌块总用量": 1.00}
+        },
+        "roof_type": {
+          "种植屋面": {"混凝土总用量": 1.08},
+          "金属屋面": {"混凝土总用量": 0.90, "钢筋总用量": 0.90},
+          "坡屋面":   {"混凝土总用量": 0.95},
+          "平屋面":   {"混凝土总用量": 1.00}
         }
       }
     }

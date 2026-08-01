@@ -557,8 +557,12 @@ let confidencePreviewTimer = null;
 async function fetchConfidencePreview() {
     const params = new URLSearchParams();
     const fields = ['foundation_type', 'seismic_grade', 'soil_condition',
-                    'decoration_level', 'exterior_wall', 'hvac',
-                    'concrete_grade', 'steel_grade'];
+                    'decoration_level', 'exterior_wall', 'roof_type', 'window_type',
+                    'hvac', 'elevator', 'fire_system', 'smart_building',
+                    'concrete_grade', 'steel_grade',
+                    'basement_area', 'building_height', 'duration',
+                    'special_equipment', 'green_rating',
+                    'elevator_count', 'parking_ratio', 'parking_count'];
     fields.forEach(key => {
         const el = document.querySelector(`[data-param-key="${key}"]`);
         if (el && el.value) params.append(key, el.value);
