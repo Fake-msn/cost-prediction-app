@@ -69,7 +69,13 @@ class DataLoader:
         self.use_duckdb = use_duckdb and HAS_DUCKDB
         self.db_path = os.path.join(data_dir, 'cost_prediction.duckdb')
         os.makedirs(data_dir, exist_ok=True)
+        # to_dataframe 结果缓存：避免并发对话/评估时重复读 Excel + DuckDB（性能优化）
+        self._df_cache = None
         self._load_existing()
+
+    def _invalidate_df_cache(self):
+        """数据源变化后失效 to_dataframe 缓存"""
+        self._df_cache = None
 
     def _load_existing(self):
         """加载已有数据 - 优先从 DuckDB，回退到 JSON"""
@@ -125,6 +131,33 @@ class DataLoader:
             # 模拟数据或无来源信息的数据
             df['_sample_weight'] = 0.3
 
+        # ===== 数据质量校验（H3）：过滤明显异常的行，避免污染训练集 =====
+        # 规则：
+        #   1. 单方造价超出合理区间 [500, 50000] 元/m² 视为异常
+        #   2. 总建筑面积 <= 0 视为异常
+        #   3. 项目总造价 <= 0 视为异常
+        dropped_reasons = {"单方造价异常": 0, "面积异常": 0, "总造价异常": 0}
+        _up = pd.to_numeric(df.get("单方造价"), errors="coerce")
+        _area = pd.to_numeric(df.get("总建筑面积"), errors="coerce")
+        _cost = pd.to_numeric(df.get("项目总造价"), errors="coerce")
+        _keep = pd.Series(True, index=df.index)
+        _bad_up = _up.notna() & ~_up.between(500, 50000)
+        _bad_area = _area.notna() & (_area <= 0)
+        _bad_cost = _cost.notna() & (_cost <= 0)
+        dropped_reasons["单方造价异常"] = int(_bad_up.sum())
+        dropped_reasons["面积异常"] = int(_bad_area.sum())
+        dropped_reasons["总造价异常"] = int(_bad_cost.sum())
+        _keep &= ~_bad_up & ~_bad_area & ~_bad_cost
+        if not _keep.all():
+            dropped_count = int((~_keep).sum())
+            df = df[_keep].copy()
+            print(f"[DataLoader] 数据质量过滤: 丢弃 {dropped_count} 条异常记录 "
+                  f"(单方造价异常 {dropped_reasons['单方造价异常']}, 面积异常 {dropped_reasons['面积异常']}, "
+                  f"总造价异常 {dropped_reasons['总造价异常']})")
+
+        if len(df) == 0:
+            return {"success": False, "error": "导入文件中无有效数据（所有行均被质量校验过滤）", "dropped": dropped_reasons}
+
         imported = []
         for idx, row in df.iterrows():
             record = {
@@ -143,6 +176,7 @@ class DataLoader:
             imported.append(record)
 
         self.history.extend(imported)
+        self._invalidate_df_cache()  # 数据源已变化，失效 to_dataframe 缓存
         self._save()
         
         # 同步写入 DuckDB
@@ -158,6 +192,7 @@ class DataLoader:
             "success": True,
             "imported_count": len(imported),
             "total_count": len(self.history),
+            "dropped": dropped_reasons if any(dropped_reasons.values()) else None,
             "samples": imported[:3]
         }
 
@@ -549,6 +584,10 @@ class DataLoader:
         - 仅在 DuckDB 中的项目，用规范比例估算费用构成
         """
         # 1. 加载 Excel 训练数据（含完整费用构成、材料用量）
+        # 缓存命中：数据源未变化时直接复用，避免并发场景重复读 Excel + DuckDB
+        if self._df_cache is not None:
+            return self._df_cache
+
         excel_dfs = []
         excel_files = [
             os.path.join(self.data_dir, 'real_training_data.xlsx'),
@@ -686,6 +725,7 @@ class DataLoader:
                     print(f"[to_dataframe] 地区归一化: {before} → {after}")
 
             print(f"[to_dataframe] 合并后总计 {len(merged)} 条记录, {len(merged.columns)} 列")
+            self._df_cache = merged  # 写入缓存
             return merged
         except Exception as e:
             print(f"[to_dataframe] 合并失败: {e}")

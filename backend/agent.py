@@ -491,12 +491,25 @@ class CostAgentManager:
         if history is None:
             history = []
 
-        real_agent = self.get_or_build_agent(session_id)
-        print(f"[chat] session={session_id}, real_agent={'AgentScope' if real_agent is not None else 'None→MockLLM'}, msg_len={len(user_message)}")
-        if real_agent is not None:
-            return await self._chat_with_real_agent(real_agent, user_message, history, session_id)
-        else:
-            return await self._chat_with_mock(user_message, history, session_id)
+        try:
+            real_agent = self.get_or_build_agent(session_id)
+            print(f"[chat] session={session_id}, real_agent={'AgentScope' if real_agent is not None else 'None→MockLLM'}, msg_len={len(user_message)}")
+            if real_agent is not None:
+                return await self._chat_with_real_agent(real_agent, user_message, history, session_id)
+            else:
+                return await self._chat_with_mock(user_message, history, session_id)
+        except Exception as e:
+            # 顶层容错（M6）：任何未预期的异常都不应使对话端点崩溃
+            import traceback
+            traceback.print_exc()
+            return {
+                "session_id": session_id,
+                "reply": f"抱歉，处理您的消息时出现异常（{type(e).__name__}）。请稍后重试或描述得更具体一些。",
+                "react_steps": [{"step": "thought", "content": "处理异常，已降级返回"}],
+                "tool_result": None,
+                "backend": "error_fallback",
+                "history_count": len(history) + 2,
+            }
 
     async def _chat_with_real_agent(self, agent, user_message: str, history: List[Dict], session_id: str) -> Dict:
         """使用真实 AgentScope Agent（含重试）"""

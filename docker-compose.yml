@@ -9,6 +9,7 @@ services:
       - ./data:/app/data
       - ./models_cache:/app/models_cache
       - ./model_config.json:/app/model_config.json
+      - ./output:/app/output   # 应用日志持久化（output/app.log）
     environment:
       - PYTHONPATH=/app
       - CORS_ORIGINS=http://localhost:8000,http://localhost:3000
@@ -16,8 +17,24 @@ services:
       # - DASHSCOPE_API_KEY=your_key_here
       # - OPENAI_API_KEY=your_key_here
     restart: unless-stopped
+    # 资源限制（M7）：防止容器无界占用宿主机资源
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: "2.0"
+        reservations:
+          memory: 512m
+          cpus: "0.5"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      # L2: 使用 127.0.0.1 而非 localhost，避免 IPv6 解析回退导致健康检查超时
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 30s

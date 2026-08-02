@@ -116,35 +116,45 @@ class FeatureExtractor:
         ProjectFeatures
         """
         features = ProjectFeatures()
-        text = parsed_content.full_text or ''
-        tables = parsed_content.tables or []
+        try:
+            text = parsed_content.full_text or ''
+            tables = parsed_content.tables or []
 
-        # ---- 从文本提取 ----
-        features.project_name = self._extract_project_name(
-            parsed_content.filename, text
-        )
-        features.building_type = self._match_building_type(text)
-        features.structure_type = self._extract_structure(text)
-        features.total_area = self._extract_area(text)
-        features.land_area = self._extract_land_area(text)
-        features.location = self._extract_location(text)
-        features.build_year = self._extract_year(text)
-        features.floor_count = self._extract_floors(text)
-        features.above_ground_floors, features.under_ground_floors = (
-            self._extract_floor_breakdown(text)
-        )
-        features.decoration_standard = self._extract_decoration(text)
+            # ---- 从文本提取 ----
+            features.project_name = self._extract_project_name(
+                parsed_content.filename, text
+            )
+            features.building_type = self._match_building_type(text)
+            features.structure_type = self._extract_structure(text)
+            features.total_area = self._extract_area(text)
+            features.land_area = self._extract_land_area(text)
+            features.location = self._extract_location(text)
+            features.build_year = self._extract_year(text)
+            features.floor_count = self._extract_floors(text)
+            features.above_ground_floors, features.under_ground_floors = (
+                self._extract_floor_breakdown(text)
+            )
+            features.decoration_standard = self._extract_decoration(text)
 
-        # ---- 从表格行提取（label-value 对扫描）----
-        self._extract_fields_from_tables(tables, features, text)
+            # ---- 从表格行提取（label-value 对扫描）----
+            self._extract_fields_from_tables(tables, features, text)
 
-        # ---- 从表格提取造价 ----
-        features.total_cost, features.unit_price = self._extract_cost_from_tables(
-            tables, features.total_area
-        )
+            # ---- 从表格提取造价 ----
+            features.total_cost, features.unit_price = self._extract_cost_from_tables(
+                tables, features.total_area
+            )
+        except Exception as e:
+            # 容错：单个字段提取异常不应中断整体流程（M6）
+            import logging
+            logging.getLogger("cost_prediction.feature_extractor").warning(
+                "特征提取部分失败，返回不完整结果: %s", e
+            )
 
         # ---- 计算置信度 & 记录来源 ----
-        self._calculate_confidence(features, text, tables)
+        try:
+            self._calculate_confidence(features, text, tables)
+        except Exception:
+            pass
 
         return features
 

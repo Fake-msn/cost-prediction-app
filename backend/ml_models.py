@@ -547,6 +547,9 @@ class RealTrainedModel:
     _use_tree_features = False  # 子类可覆盖为 True
     _use_safe_features = False  # 子类可覆盖为 True（安全特征集，零泄漏）
 
+    # 泛化性能门槛：CV R² 低于此值视为训练失败，不参与预测融合
+    MIN_ACCEPTABLE_ACCURACY = 30.0
+
     def __init__(self, info: TrainedModelInfo):
         self.info = info
         self.pipeline: Optional[Pipeline] = None
@@ -555,6 +558,13 @@ class RealTrainedModel:
 
     def _cache_path(self, models_dir: str) -> str:
         return os.path.join(models_dir, f"{self.info.model_id}.joblib")
+
+    def _apply_accuracy_gate(self) -> bool:
+        """应用精度门槛：accuracy 过低时标记为未训练，返回模型是否可用。"""
+        if self.info.accuracy < self.MIN_ACCEPTABLE_ACCURACY:
+            self.info.is_trained = False
+            return False
+        return True
 
     def _load(self, models_dir: str = None):
         """从磁盘加载已训练模型"""
@@ -572,7 +582,8 @@ class RealTrainedModel:
                 self.info.mape = data.get("mape", 0)
                 self.info.train_samples = data.get("train_samples", 0)
                 self.info.trained_at = data.get("trained_at", "")
-                self.info.is_trained = True
+                # 精度门槛：泛化性能不足的模型仍标记为未训练（不参与预测）
+                self.info.is_trained = data.get("accuracy", 0) >= self.MIN_ACCEPTABLE_ACCURACY
                 # 恢复 log 变换标记（树模型或 PSO-SVR）
                 if data.get("uses_log_transform", False):
                     self._uses_log_transform = True
@@ -707,7 +718,7 @@ class RealTrainedModel:
         self.info.mape = round(float(mape) * 100, 1)
         self.info.train_samples = len(X)
         self.info.trained_at = datetime.now().isoformat()
-        self.info.is_trained = True
+        self._apply_accuracy_gate()  # 精度门槛：过低则标记为未训练
         self.info.feature_columns = list(X.columns)
         if use_tree:
             self._uses_log_transform = True
@@ -745,7 +756,7 @@ class RealTrainedModel:
         }, self._cache_path(models_dir))
 
         return {
-            "success": True,
+            "success": self.info.is_trained,
             "model_id": self.info.model_id,
             "algorithm": self.info.algorithm,
             "accuracy": self.info.accuracy,
@@ -753,6 +764,8 @@ class RealTrainedModel:
             "mape": self.info.mape,
             "train_samples": self.info.train_samples,
             "evaluation_method": "5-fold CV",
+            **({"error": f"模型泛化性能不足（R²={self.info.accuracy}% < {self.MIN_ACCEPTABLE_ACCURACY}%），已标记为未训练",
+                "low_accuracy": True} if not self.info.is_trained else {}),
         }
 
     def _get_feature_names(self, preprocessor, X: pd.DataFrame) -> List[str]:
@@ -982,7 +995,7 @@ class TotalCostSVRModel(RealTrainedModel):
         self.info.mape = mape_pct
         self.info.train_samples = len(y)
         self.info.trained_at = datetime.now().isoformat()
-        self.info.is_trained = True
+        self._apply_accuracy_gate()  # 精度门槛：过低则标记为未训练
         self.info.feature_columns = list(X_df.columns)
         self._uses_log_transform = True  # 标记：predict 时需要 expm1
 
@@ -1169,7 +1182,7 @@ class SectionXGBModel(RealTrainedModel):
         self.info.accuracy = round(r2 * 100, 1)
         self.info.cv_r2 = self.info.accuracy
         self.info.train_samples = len(X)
-        self.info.is_trained = True
+        self._apply_accuracy_gate()  # 精度门槛：过低则标记为未训练
         self.info.trained_at = datetime.now().isoformat()
 
         # 提取特征重要度（取各输出的平均）
@@ -1309,7 +1322,7 @@ class SubsectionXGBModel(RealTrainedModel):
         self.info.accuracy = round(r2 * 100, 1)
         self.info.cv_r2 = self.info.accuracy
         self.info.train_samples = len(X)
-        self.info.is_trained = True
+        self._apply_accuracy_gate()  # 精度门槛：过低则标记为未训练
         self.info.trained_at = datetime.now().isoformat()
 
         feature_importance = {}
@@ -1335,6 +1348,10 @@ class SubsectionXGBModel(RealTrainedModel):
         }, self._cache_path(models_dir))
 
         print(f"[train {self.info.model_id}] R²={self.info.accuracy}%, samples={len(X)}, per_output_R²={cv_scores}")
+        if not self.info.is_trained:
+            return {"success": False,
+                    "error": f"模型泛化性能不足（R²={self.info.accuracy}% < {self.MIN_ACCEPTABLE_ACCURACY}%），已标记为未训练",
+                    "accuracy": self.info.accuracy, "train_samples": len(X), "low_accuracy": True}
         return {"success": True, "accuracy": self.info.accuracy, "train_samples": len(X)}
 
     def predict(self, project: Dict) -> Dict:
@@ -1411,6 +1428,13 @@ class ItemXGBModel(RealTrainedModel):
         steel_per_m2 = steel_total / total_area
         block_per_m2 = block_total / total_area
 
+        # 单位自适应（H3）：真实造价数据中钢筋总用量常以"吨"计，
+        # 此时单方耗量中位数 < 1（吨/m²）。检测到后统一转为 kg/m²（×1000）。
+        _steel_pos = steel_per_m2[steel_per_m2 > 0]
+        if len(_steel_pos) > 0 and _steel_pos.median() < 1:
+            steel_per_m2 = steel_per_m2 * 1000
+            print(f"[train item_xgb] 检测到钢筋单方耗量为吨/m²（中位数={_steel_pos.median():.3f}），已转换为 kg/m²")
+
         y = pd.DataFrame({'混凝土单方': concrete_per_m2, '钢筋单方': steel_per_m2, '砌块单方': block_per_m2})
         y = y[mask]
 
@@ -1441,7 +1465,7 @@ class ItemXGBModel(RealTrainedModel):
         self.info.accuracy = round(r2 * 100, 1)
         self.info.cv_r2 = self.info.accuracy
         self.info.train_samples = len(X)
-        self.info.is_trained = True
+        self._apply_accuracy_gate()  # 精度门槛：过低则标记为未训练
         self.info.trained_at = datetime.now().isoformat()
 
         feature_importance = {}
@@ -1491,10 +1515,12 @@ class ItemXGBModel(RealTrainedModel):
         }])
         X = extract_tree_features(sample)
         pred = self.pipeline.predict(X)[0]
+        # 输出合理性钳制（H3）：数据不足时模型可能产生极端/单位异常值，
+        # 钳制到行业合理范围（钢筋 20-200 kg/m²，混凝土 0.1-1.5 m³/m²，砌块 0.02-1.0 m³/m²）
         consumption = {
-            '混凝土单方(m³/m²)': round(max(0, float(pred[0])), 4),
-            '钢筋单方(kg/m²)': round(max(0, float(pred[1])), 2),
-            '砌块单方(m³/m²)': round(max(0, float(pred[2])), 4),
+            '混凝土单方(m³/m²)': round(min(max(float(pred[0]), 0.1), 1.5), 4),
+            '钢筋单方(kg/m²)': round(min(max(float(pred[1]), 20.0), 200.0), 2),
+            '砌块单方(m³/m²)': round(min(max(float(pred[2]), 0.02), 1.0), 4),
         }
         return {
             "model_id": self.info.model_id, "model_name": self.info.name,
@@ -1565,7 +1591,7 @@ class IndicatorRFModel(RealTrainedModel):
         self.info.accuracy = round(r2 * 100, 1)
         self.info.cv_r2 = self.info.accuracy
         self.info.train_samples = len(X)
-        self.info.is_trained = True
+        self._apply_accuracy_gate()  # 精度门槛：过低则标记为未训练
         self.info.trained_at = datetime.now().isoformat()
 
         feature_importance = {}
@@ -1699,7 +1725,7 @@ class BOQXGBModel(RealTrainedModel):
         self.info.cv_r2 = round(r2 * 100, 1)
         self.info.accuracy = self.info.cv_r2
         self.info.train_samples = len(X)
-        self.info.is_trained = True
+        self._apply_accuracy_gate()  # 精度门槛：过低则标记为未训练
         self.info.trained_at = datetime.now().isoformat()
         self._uses_log_transform = True
 
@@ -1766,7 +1792,7 @@ class BOQLRModelV2(RealTrainedModel):
         self.info.cv_r2 = round(r2 * 100, 1)
         self.info.accuracy = self.info.cv_r2
         self.info.train_samples = len(X)
-        self.info.is_trained = True
+        self._apply_accuracy_gate()  # 精度门槛：过低则标记为未训练
         self.info.trained_at = datetime.now().isoformat()
         self._uses_log_transform = True
 

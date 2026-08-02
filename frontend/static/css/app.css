@@ -1067,3 +1067,52 @@
 #upload-result table tr:nth-child(even) {
     background: rgba(0,0,0,0.02);
 }
+
+/* ============================================
+   响应式适配（L1）— 平板/手机端布局
+   ============================================ */
+@media (max-width: 900px) {
+    /* 三栏 → 上下两段：侧边栏置顶收缩，主内容占满 */
+    .app-shell {
+        grid-template-columns: 1fr;
+        grid-template-rows: 180px 1fr;
+        overflow-y: auto;
+    }
+    .sidebar {
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+    }
+    .sidebar-content { padding: 8px 12px; }
+    .session-list {
+        flex-direction: row;
+        overflow-x: auto;
+        padding-bottom: 8px;
+    }
+    .session-item { flex-shrink: 0; max-width: 220px; }
+    /* 表单/阶段卡片单列 */
+    .form-grid { grid-template-columns: 1fr; }
+    .stage-options { grid-template-columns: 1fr; }
+    .feature-grid, .pricing-grid { grid-template-columns: 1fr; }
+    /* 对话输入区 */
+    .chat-input-wrap { flex-direction: column; }
+}
+
+@media (max-width: 480px) {
+    .app-page { height: 100dvh; }
+    .app-header { padding: 0 12px; gap: 8px; }
+    .header-title { font-size: 13px; }
+    .header-badge { display: none; }
+    .app-shell { grid-template-rows: 140px 1fr; }
+    .wizard-steps { overflow-x: auto; }
+    .wizard-step { min-width: 120px; }
+    .param-grid { grid-template-columns: 1fr; }
+    /* 结果展示列适配 */
+    .composition-row {
+        grid-template-columns: 20px 1fr 70px;
+        gap: 8px;
+    }
+    .result-cards { flex-direction: column; }
+    .card-grid { grid-template-columns: 1fr; }
+    /* 上传区域 */
+    #upload-section { padding: 16px; }
+}
