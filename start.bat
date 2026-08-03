@@ -177,13 +177,41 @@ if errorlevel 1 (
 echo [4/4] Starting service...
 echo.
 echo ==========================================
-echo   Service ready: http://localhost:8000
+echo   Starting server on http://localhost:8000
 echo   Press Ctrl+C to stop
 echo ==========================================
 echo.
+python backend\main.py
+if errorlevel 1 goto :svc_error
+
+echo.
+echo ==========================================
+echo   Server stopped normally.
+echo ==========================================
+goto :svc_done
+
+:svc_error
+echo.
+echo ==========================================
+echo   !!! SERVER EXITED WITH AN ERROR !!!
+echo.
+echo   Look at the messages ABOVE this line to find the cause.
+echo.
+echo   Common fixes:
+echo   1. Missing models: ensure models_cache\ has .joblib files
+echo   2. Database issue: delete data\cost_prediction.duckdb and re-run
+echo   3. Port conflict: close other programs using port 8000
+echo   4. Dependency issue: run manually:
+echo      venv\Scripts\activate ^&^& python -m pip install -r backend\requirements.txt
+echo.
+echo   To see the full error, open a terminal here and run:
+echo      cd /d "%~dp0" ^&^& venv\Scripts\activate ^&^& python backend\main.py
+echo ==========================================
+
+:svc_done
+echo.
 echo [Tip] For AI chat features, copy .env.example to .env and add your API key.
 echo.
-python backend\main.py
 pause
 
 :: =========================================================
