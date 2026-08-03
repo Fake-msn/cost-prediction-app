@@ -15,9 +15,6 @@ COPY backend/requirements.txt ./backend/requirements.txt
 # 安装Python依赖
 RUN pip install --no-cache-dir -r backend/requirements.txt
 
-# 可选依赖
-RUN pip install --no-cache-dir xgboost || true
-
 # 复制应用代码
 COPY backend/ ./backend/
 COPY frontend/ ./frontend/

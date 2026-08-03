@@ -167,16 +167,20 @@ _existing_sources = {h.get('source_file') for h in data_loader.history}
 _real_path = os.path.join(DATA_DIR, "real_training_data.xlsx")
 if os.path.exists(_real_path) and "real_training_data.xlsx" not in _existing_sources:
     try:
+        logger.info("[初始化] 正在从 %s 导入训练数据...", os.path.basename(_real_path))
         with open(_real_path, "rb") as _f:
             data_loader.import_from_excel(_f.read(), "real_training_data.xlsx")
+        logger.info("[初始化] 训练数据导入完成 (real)")
     except Exception:
         pass
 
 _sample_path = os.path.join(DATA_DIR, "sample_training_data.xlsx")
 if os.path.exists(_sample_path) and "sample_training_data.xlsx" not in _existing_sources:
     try:
+        logger.info("[初始化] 正在从 %s 导入训练数据...", os.path.basename(_sample_path))
         with open(_sample_path, "rb") as _f:
             data_loader.import_from_excel(_f.read(), "sample_training_data.xlsx")
+        logger.info("[初始化] 训练数据导入完成 (sample)")
     except Exception:
         pass
 

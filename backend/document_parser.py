@@ -11,7 +11,11 @@ from typing import List, Dict, Optional
 # Set Tesseract path
 try:
     import pytesseract
-    pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+    # Windows: explicit path (常见安装路径不在默认 PATH 中)
+    # Linux/macOS/Docker: rely on system PATH (/usr/bin/tesseract, /usr/local/bin/tesseract, etc.)
+    import platform
+    if platform.system() == "Windows":
+        pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 except ImportError:
     pytesseract = None
 
