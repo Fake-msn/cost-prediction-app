@@ -20,16 +20,34 @@ call :py_test "python"        && goto :python_ready
 call :py_test "py -3.11"      && goto :python_ready
 call :py_test "python3"       && goto :python_ready
 
-:: ---- Auto-Install via winget ----
-echo [1/4] Python 3.11+ not detected. Trying automatic installation...
+:: ---- Auto-Install via winget (convenience, but may not be the latest version) ----
+echo [1/4] Python 3.11+ not detected.
+echo.
+echo   RECOMMENDED: Download the official installer from python.org
+echo   https://www.python.org/downloads/
+echo   (Choose Windows 64-bit, check "Add python.exe to PATH")
+echo.
+echo   After installation, re-run this script.
+echo.
 where winget >nul 2>&1
 if errorlevel 1 goto :no_winget
 
-echo [1/4] Running: winget install Python.Python.3.11
+echo [1/4] Alternatively, press Y to let winget try an automatic install.
+echo [1/4] (WARNING: winget may install an older version. python.org is preferred.)
+set "WINGET_CHOICE="
+set /p WINGET_CHOICE="       Auto-install via winget? [y/N]: "
+if /i not "!WINGET_CHOICE!"=="y" goto :python_failed
+
+echo [1/4] Running: winget install Python.Python.3.13
 echo [1/4] This may take a few minutes...
-winget install --id Python.Python.3.11 -e --accept-package-agreements --disable-interactivity
+winget install --id Python.Python.3.13 -e --accept-package-agreements --disable-interactivity 2>nul
+if errorlevel 1 (
+    echo [1/4] Python 3.13 not found in winget, trying 3.12...
+    winget install --id Python.Python.3.12 -e --accept-package-agreements --disable-interactivity 2>nul
+)
 if errorlevel 1 (
     echo [1/4] winget installation failed.
+    echo Please download from https://www.python.org/downloads/ instead.
     goto :python_failed
 )
 
@@ -41,13 +59,18 @@ for /f "usebackq tokens=2,*" %%a in (`reg query HKCU\Environment /v PATH 2^>nul`
 set "PATH=!SYS_PATH!;!USR_PATH!;!PATH!"
 
 :: Add common install locations explicitly
-for %%d in ("!LOCALAPPDATA!\Programs\Python\Python312" "!LOCALAPPDATA!\Programs\Python\Python311" "!PROGRAMFILES!\Python312" "!PROGRAMFILES!\Python311") do (
+for %%d in ("!LOCALAPPDATA!\Programs\Python\Python313" "!LOCALAPPDATA!\Programs\Python\Python312" "!LOCALAPPDATA!\Programs\Python\Python311" "!PROGRAMFILES!\Python313" "!PROGRAMFILES!\Python312" "!PROGRAMFILES!\Python311") do (
     if exist "%%~d\python.exe" set "PATH=%%~d;%%~d\Scripts;!PATH!"
 )
 
 :: Retry detection after PATH refresh
 call :py_test "python"        && goto :python_ready
 call :py_test "python3"       && goto :python_ready
+
+:: winget installed but detection still failed
+echo [1/4] Python was installed but could not be detected. You may need to reboot.
+echo Please re-run this script after rebooting, or install manually from python.org
+goto :python_failed
 
 :: ---- winget unavailable ----
 :no_winget
@@ -61,13 +84,10 @@ echo [ERROR] Could not locate or install Python 3.11+.
 echo.
 echo This application requires Python 3.11 or later.
 echo.
-echo Please install Python 3.11+ manually, then re-run this script:
+echo Please install Python 3.13+ from the official website, then re-run this script:
 echo.
 echo   Official installer:  https://www.python.org/downloads/
-echo   Microsoft Store:     Search "Python 3.11"
-echo.
-echo   IMPORTANT: During installation, check
-echo   "Add python.exe to PATH" before clicking Install.
+echo   (Choose Windows installer (64-bit), check "Add python.exe to PATH")
 echo ================================================================
 echo.
 echo This window will stay open so you can read the error.
@@ -111,15 +131,22 @@ if errorlevel 1 (
     exit /b 1
 )
 
+:: Upgrade pip in venv (ensures pip is available and up-to-date)
+echo [2/4] Upgrading pip...
+python -m pip install --upgrade pip -q
+
 :: [3/4] Install dependencies
 echo [3/4] Installing dependencies (this may take a while on first run)...
-pip install -r backend\requirements.txt -q
+echo.
+python -m pip install -r backend\requirements.txt
 if errorlevel 1 (
+    echo.
     echo [ERROR] Failed to install Python dependencies.
-    echo Try running manually: pip install -r backend\requirements.txt
+    echo Try running manually: python -m pip install -r backend\requirements.txt
     pause >nul
     exit /b 1
 )
+echo.
 
 :: Check bundled models (included in release package)
 if not exist "models_cache\*.joblib" (
