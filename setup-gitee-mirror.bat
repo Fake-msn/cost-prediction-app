@@ -1,16 +1,15 @@
 @echo off
-chcp 65001 >nul
 echo ==========================================
-echo   设置 Gitee 镜像仓库（国内推送备选）
+echo   Setup Gitee mirror (domestic push backup)
 echo ==========================================
 echo.
-echo 此脚本将添加 Gitee 作为备选推送远程仓库
-echo 请先在 gitee.com 创建同名仓库
+echo This script adds Gitee as an alternate push remote.
+echo Please create the same-named repo on gitee.com first.
 echo.
-set /p GITEE_URL=请输入 Gitee 仓库地址（如 https://gitee.com/xxx/cost-prediction-app.git）:
+set /p GITEE_URL=Enter Gitee repo URL (e.g. https://gitee.com/xxx/cost-prediction-app.git): 
 
 git remote add gitee %GITEE_URL%
 echo.
-echo Gitee 远程仓库已添加: %GITEE_URL%
-echo 推送命令: git push gitee main
+echo Gitee remote added: %GITEE_URL%
+echo Push with: git push gitee main
 pause

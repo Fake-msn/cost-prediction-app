@@ -1,45 +1,57 @@
 @echo off
 chcp 65001 >nul
 echo ==========================================
-echo   工程造价预测AI系统 - 一键启动
+echo   Construction Cost Prediction AI System
+echo   One-Click Startup
 echo ==========================================
+echo.
 
-:: Check Python
-python --version >nul 2>&1
+:: [1/4] Check Python 3.11+
+echo [1/4] Checking Python...
+python -c "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)" >nul 2>&1
 if errorlevel 1 (
-    echo [错误] 未找到 Python，请先安装 Python 3.11+
-    echo 下载地址: https://www.python.org/downloads/
+    echo [ERROR] Python 3.11+ not found. Please install it first.
+    echo Download: https://www.python.org/downloads/
+    echo IMPORTANT: check "Add python.exe to PATH" during installation.
     pause
     exit /b 1
 )
 
-:: Create venv if not exists
+:: Create venv if missing
 if not exist "venv\Scripts\activate.bat" (
-    echo [1/4] 创建虚拟环境...
+    echo [1/4] Creating virtual environment...
     python -m venv venv
 )
 
-:: Activate
-echo [2/4] 激活虚拟环境...
+:: [2/4] Activate venv
+echo [2/4] Activating virtual environment...
 call venv\Scripts\activate.bat
 
-:: Install deps
-echo [3/4] 安装/更新依赖...
+:: [3/4] Install dependencies
+echo [3/4] Installing dependencies...
 pip install -r backend\requirements.txt -q
 
-:: Check Tesseract
-where tesseract >nul 2>&1
-if errorlevel 1 (
-    echo [警告] 未找到 Tesseract OCR，PDF扫描件OCR功能不可用
-    echo 下载地址: https://github.com/UB-Mannheim/tesseract/wiki
+:: Check bundled models (included in release package)
+if not exist "models_cache\*.joblib" (
+    echo [ERROR] No trained models in models_cache. Re-download the release package.
+    pause
+    exit /b 1
 )
 
-:: Start
-echo [4/4] 启动服务...
+:: Check Tesseract (optional)
+where tesseract >nul 2>&1
+if errorlevel 1 (
+    echo [WARNING] Tesseract OCR not found - OCR for scanned PDFs unavailable.
+    echo Download: https://github.com/UB-Mannheim/tesseract/wiki
+)
+
+:: [4/4] Start
+echo [4/4] Starting service...
 echo.
 echo ==========================================
-echo   服务已启动: http://localhost:8000
-echo   按 Ctrl+C 停止服务
+echo   Service ready: http://localhost:8000
+echo   Press Ctrl+C to stop
 echo ==========================================
 echo.
 python backend\main.py
+pause

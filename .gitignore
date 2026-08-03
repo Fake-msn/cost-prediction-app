@@ -10,11 +10,7 @@ venv/
 env/
 *.so
 
-# Model cache (太大，训练后可重新生成)
-models_cache/
-*.joblib
-
-# Data (含示例数据，保留但忽略历史)
+# Data (training data and duckdb are tracked; runtime files ignored)
 data/history.json
 data/uploads/
 data/*.duckdb
@@ -37,14 +33,14 @@ test_*.json
 _test_*.json
 verify_*.py
 
-# LLM配置（含API Key，安全考虑必须排除）
+# LLM config (contains API keys, must be excluded)
 model_config.json
 
-# 运行时输出
+# Runtime output
 output/
 
 # AgentScope
 agent_scope_cache/
 
-# ѹ����ʱĿ¼
+# Stress test temp dir
 _stress_test_tmp/

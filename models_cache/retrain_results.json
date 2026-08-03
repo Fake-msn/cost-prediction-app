@@ -1,0 +1,18 @@
+{
+  "subsection_xgb": {
+    "accuracy": 0,
+    "samples": 126
+  },
+  "section_xgb": {
+    "accuracy": 76.5,
+    "samples": 126
+  },
+  "item_xgb": {
+    "accuracy": 52.4,
+    "samples": 126
+  },
+  "total_pso_svr": {
+    "accuracy": 70.5,
+    "samples": 126
+  }
+}
