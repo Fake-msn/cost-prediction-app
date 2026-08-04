@@ -173,6 +173,18 @@ if errorlevel 1 (
     )
 )
 
+:: ---- Verify DuckDB integrity (auto-recover from corruption) ----
+if exist "data\cost_prediction.duckdb" (
+    python -c "import duckdb; c=duckdb.connect(r'data\cost_prediction.duckdb',read_only=True); c.execute('SELECT 1 FROM boq_items LIMIT 1'); c.close()" >nul 2>&1
+    if errorlevel 1 (
+        echo [WARNING] DuckDB database appears corrupted.
+        echo [WARNING] Removing it now. It will be rebuilt from Excel training data.
+        del "data\cost_prediction.duckdb"
+    ) else (
+        echo [OK] DuckDB database integrity verified.
+    )
+)
+
 :: [4/4] Start
 echo [4/4] Starting service...
 echo.
