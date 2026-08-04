@@ -224,6 +224,14 @@ function validateStep1() {
         toast('请填写正确的总建筑面积');
         return false;
     }
+    // 多栋建筑面积校验（容差1%）
+    if (projectData.buildings && projectData.buildings.length) {
+        const sumArea = projectData.buildings.reduce((s, b) => s + (b.area || 0), 0);
+        if (sumArea > 0 && Math.abs(sumArea - projectData.total_area) / projectData.total_area > 0.01) {
+            toast(`各栋面积之和(${sumArea.toFixed(0)}m2)与总面积(${projectData.total_area}m2)偏差超过1%`);
+            return false;
+        }
+    }
     return true;
 }
 
