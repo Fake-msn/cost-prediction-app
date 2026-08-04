@@ -2062,6 +2062,13 @@ def predict_with_real_models(
     # 多栋建筑组合特征
     bf = extract_multi_building_features(project)
     building_count = bf["building_count"]
+    # 注入多栋特征到 project，使 L2/L3 模型的 model.predict(project) 可访问
+    project["building_count"] = building_count
+    project["floor_std"] = bf["floor_std"]
+    project["mixed_types"] = bf["mixed_types"]
+    project["residential_ratio"] = bf["residential_ratio"]
+    project["commercial_ratio"] = bf["commercial_ratio"]
+    project["avg_floor"] = bf["avg_floor"]
 
     total_area = float(project.get("total_area", 10000))
     selected_set = set(selected_model_ids)
@@ -2186,10 +2193,16 @@ def predict_with_real_models(
     # 兜底默认值
     if not trade_composition:
         total_cost = result["fused_total_cost"]
+        # 多栋特征修正默认专业占比
+        residential_r = bf.get("residential_ratio", 0)
+        commercial_r = bf.get("commercial_ratio", 0)
+        arch_ratio = max(0.35, min(0.75, 0.55 + 0.10 * residential_r - 0.05 * commercial_r))
+        install_ratio = max(0.05, min(0.30, 0.15 + 0.10 * commercial_r))
+        deco_ratio = round(1.0 - arch_ratio - install_ratio, 4)
         trade_composition = {
-            "建筑工程": {"ratio": 0.55, "amount": round(total_cost * 0.55, 2)},
-            "装饰工程": {"ratio": 0.30, "amount": round(total_cost * 0.30, 2)},
-            "安装工程": {"ratio": 0.15, "amount": round(total_cost * 0.15, 2)},
+            "建筑工程": {"ratio": arch_ratio, "amount": round(total_cost * arch_ratio, 2)},
+            "装饰工程": {"ratio": deco_ratio, "amount": round(total_cost * deco_ratio, 2)},
+            "安装工程": {"ratio": install_ratio, "amount": round(total_cost * install_ratio, 2)},
         }
 
     # ========== L2: 分部造价占比 ==========

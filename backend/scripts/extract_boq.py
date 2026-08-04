@@ -360,6 +360,12 @@ def parse_buildings_from_unit_names(unit_names: List[str]) -> Tuple[int, Optiona
         btype = "住宅"  # default
 
         m = re.search(r'(\d+)\s*[层楼Ff]', name)
+        if not m:
+            # 匹配 # 编号格式：10#楼、1#楼
+            m = re.search(r'(\d+)#[\u4e00-\u9fff]*[楼栋幢]?', name)
+        if not m:
+            # 匹配范围格式：10~12#楼、1~3#楼 → 取第一个数字
+            m = re.search(r'(\d+)\s*[~\uFF5E]\s*\d+\s*#', name)
         if m:
             floors = int(m.group(1))
             floor_values.append(floors)

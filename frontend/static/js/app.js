@@ -405,6 +405,9 @@ function renderBuildingRows() {
             <input type="number" placeholder="楼层" value="${b.floors}" min="1" max="200"
                 onchange="projectData.buildings[${i}].floors=parseInt(this.value)||1"
                 style="width:80px;padding:6px;border:1px solid var(--border);border-radius:4px;">
+            <input type="number" placeholder="地下" value="${b.basement || 0}" min="0" max="20"
+                onchange="projectData.buildings[${i}].basement=parseInt(this.value)||0"
+                style="width:70px;padding:6px;border:1px solid var(--border);border-radius:4px;">
             <select onchange="projectData.buildings[${i}].type=this.value"
                 style="width:120px;padding:6px;border:1px solid var(--border);border-radius:4px;">
                 ${['住宅','商业','办公','学校','医院','工业','车库'].map(t =>
@@ -420,7 +423,7 @@ function renderBuildingRows() {
 
 function addBuildingRow() {
     if (!projectData.buildings) projectData.buildings = [];
-    projectData.buildings.push({ floors: 1, type: '住宅', area: 1000 });
+    projectData.buildings.push({ floors: 1, type: '住宅', area: 1000, basement: 0 });
     document.getElementById('building-list').innerHTML = renderBuildingRows();
 }
 

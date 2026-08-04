@@ -118,14 +118,40 @@ def migrate_excel_to_duckdb(excel_path: str, db_path: str = None) -> Dict:
                 conf_map = {'high': 0.9, 'medium': 0.7, 'low': 0.5}
                 confidence_val = conf_map.get(confidence, 0.5)
                 
+                # 多栋建筑信息（若Excel行中包含相关列）
+                row_building_count = int(row.get('栋数', row.get('建筑栋数', 1)) or 1)
+                row_buildings_json = None
+                row_max_floor = None
+                row_min_floor = None
+                row_mixed_types = False
+                # 若有各栋楼层列，尝试构造 buildings_json
+                floors_col = row.get('各栋楼层', row.get('楼栋层数', ''))
+                if floors_col and row_building_count > 1:
+                    import json as _json
+                    parts = re.split(r'[,，\s]+', str(floors_col))
+                    buildings = []
+                    floor_vals = []
+                    for p in parts[:row_building_count]:
+                        try:
+                            f = int(p)
+                            buildings.append({"floors": f, "type": str(row.get('建筑类型', '住宅'))})
+                            floor_vals.append(f)
+                        except ValueError:
+                            pass
+                    if buildings:
+                        row_buildings_json = _json.dumps(buildings, ensure_ascii=False)
+                        row_max_floor = max(floor_vals) if floor_vals else None
+                        row_min_floor = min(floor_vals) if floor_vals else None
+                
                 # 插入 project_meta
                 conn.execute("""
                     INSERT OR REPLACE INTO project_meta
                     (project_id, name, building_type, structure_type, location,
                      build_year, total_area, total_cost, unit_price, source_file,
                      extraction_date, data_quality_grade, metadata_completeness,
-                     training_weight, confidence, field_source)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     training_weight, confidence, field_source,
+                     building_count, buildings_json, max_floor, min_floor, mixed_types)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, [
                     project_id,
                     str(row.get('项目名称', '')),
@@ -143,6 +169,11 @@ def migrate_excel_to_duckdb(excel_path: str, db_path: str = None) -> Dict:
                     training_weight,
                     confidence_val,
                     'migrated_excel',
+                    row_building_count,
+                    row_buildings_json,
+                    row_max_floor,
+                    row_min_floor,
+                    row_mixed_types,
                 ])
                 
                 stats['migrated'] += 1
