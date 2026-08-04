@@ -31,7 +31,12 @@ CREATE TABLE IF NOT EXISTS project_meta (
     crosscheck_diff_pct DOUBLE,
     training_weight DOUBLE DEFAULT 0.5,
     confidence DOUBLE DEFAULT 0.5,
-    field_source VARCHAR DEFAULT 'extracted'
+    field_source VARCHAR DEFAULT 'extracted',
+    building_count INTEGER DEFAULT 1,
+    buildings_json VARCHAR,
+    max_floor INTEGER,
+    min_floor INTEGER,
+    mixed_types BOOLEAN DEFAULT FALSE
 );
 
 -- L2: 单位工程元数据表
@@ -140,7 +145,12 @@ def init_database(db_path: str = None) -> str:
                 crosscheck_diff_pct DOUBLE,
                 training_weight DOUBLE DEFAULT 0.5,
                 confidence DOUBLE DEFAULT 0.5,
-                field_source VARCHAR DEFAULT 'extracted'
+                field_source VARCHAR DEFAULT 'extracted',
+                building_count INTEGER DEFAULT 1,
+                buildings_json VARCHAR,
+                max_floor INTEGER,
+                min_floor INTEGER,
+                mixed_types BOOLEAN DEFAULT FALSE
             )
         """)
         conn.execute("""
@@ -200,6 +210,13 @@ def init_database(db_path: str = None) -> str:
             (2026, 120.0, 114.0, 1.16)
         """)
         
+        # 多栋建筑支持：为旧表补充新增列
+        conn.execute("ALTER TABLE project_meta ADD COLUMN IF NOT EXISTS building_count INTEGER DEFAULT 1")
+        conn.execute("ALTER TABLE project_meta ADD COLUMN IF NOT EXISTS buildings_json VARCHAR")
+        conn.execute("ALTER TABLE project_meta ADD COLUMN IF NOT EXISTS max_floor INTEGER")
+        conn.execute("ALTER TABLE project_meta ADD COLUMN IF NOT EXISTS min_floor INTEGER")
+        conn.execute("ALTER TABLE project_meta ADD COLUMN IF NOT EXISTS mixed_types BOOLEAN DEFAULT FALSE")
+
         print(f"[OK] DuckDB 数据库已初始化: {db_path}")
         
         # 打印表结构

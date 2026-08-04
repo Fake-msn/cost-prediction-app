@@ -337,7 +337,54 @@ def extract_boq_from_workbook(wb, project_id: str) -> Tuple[List[Dict], Dict]:
     else:
         e3_totals['diff_pct'] = None
     
-    return all_items, e3_totals
+    return all_items, e3_totals, unit_names
+
+
+def parse_buildings_from_unit_names(unit_names: List[str]) -> Tuple[int, Optional[str], Optional[int], Optional[int], bool]:
+    """
+    从单位工程名列表解析多栋建筑信息
+
+    Returns: (building_count, buildings_json, max_floor, min_floor, mixed_types)
+    """
+    import json
+    n = len(unit_names)
+    if n <= 1:
+        return 1, None, None, None, False
+
+    buildings = []
+    floor_values = []
+    type_set = set()
+
+    for name in unit_names:
+        floors = 1
+        btype = "住宅"  # default
+
+        m = re.search(r'(\d+)\s*[层楼Ff]', name)
+        if m:
+            floors = int(m.group(1))
+            floor_values.append(floors)
+
+        if '商业' in name or '商铺' in name:
+            btype = "商业"
+        elif '办公' in name or '写字楼' in name:
+            btype = "办公"
+        elif '车库' in name or '地下' in name:
+            btype = "车库"
+        elif '学校' in name or '教学' in name:
+            btype = "学校"
+        type_set.add(btype)
+
+        buildings.append({
+            "name": name[:30],
+            "floors": floors,
+            "type": btype,
+        })
+
+    max_f = max(floor_values) if floor_values else None
+    min_f = min(floor_values) if floor_values else None
+    mixed = len(type_set) > 1
+
+    return n, json.dumps(buildings, ensure_ascii=False), max_f, min_f, mixed
 
 
 def write_to_duckdb(conn, items: List[Dict], project_meta: Dict = None):
@@ -349,8 +396,9 @@ def write_to_duckdb(conn, items: List[Dict], project_meta: Dict = None):
             (project_id, name, building_type, structure_type, location, 
              build_year, total_area, total_cost, unit_price, source_file,
              extraction_date, data_quality_grade, metadata_completeness,
-             crosscheck_diff_pct, training_weight, confidence)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             crosscheck_diff_pct, training_weight, confidence,
+             building_count, buildings_json, max_floor, min_floor, mixed_types)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, [
             project_meta.get('project_id'),
             project_meta.get('name'),
@@ -368,6 +416,11 @@ def write_to_duckdb(conn, items: List[Dict], project_meta: Dict = None):
             project_meta.get('crosscheck_diff_pct'),
             project_meta.get('training_weight', 0.5),
             project_meta.get('confidence', 0.5),
+            project_meta.get('building_count', 1),
+            project_meta.get('buildings_json'),
+            project_meta.get('max_floor'),
+            project_meta.get('min_floor'),
+            project_meta.get('mixed_types', False),
         ])
     
     # 写入BOQ条目
@@ -435,7 +488,11 @@ def extract_and_store(xlsx_path: str, db_path: str = None, project_id: str = Non
     
     try:
         # 提取BOQ条目
-        items, e3_totals = extract_boq_from_workbook(wb, project_id)
+        items, e3_totals, unit_names = extract_boq_from_workbook(wb, project_id)
+        
+        # 解析多栋建筑信息
+        building_count, buildings_json, max_floor, min_floor, mixed_types = \
+            parse_buildings_from_unit_names(unit_names)
         
         # 准备项目元数据
         filename = os.path.basename(xlsx_path)
@@ -446,6 +503,11 @@ def extract_and_store(xlsx_path: str, db_path: str = None, project_id: str = Non
             'total_cost': e3_totals.get('分部分项费', 0) + e3_totals.get('措施费', 0) + 
                          e3_totals.get('规费', 0) + e3_totals.get('税金', 0),
             'crosscheck_diff_pct': e3_totals.get('diff_pct'),
+            'building_count': building_count,
+            'buildings_json': buildings_json,
+            'max_floor': max_floor,
+            'min_floor': min_floor,
+            'mixed_types': mixed_types,
         }
         
         # 写入DuckDB

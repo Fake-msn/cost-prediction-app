@@ -277,6 +277,13 @@ class ChatRequest(BaseModel):
     session_id: str = Field("default", max_length=100)
 
 
+class BuildingItem(BaseModel):
+    floors: int = Field(10, ge=1, le=500, description="该栋楼层数")
+    area: float = Field(5000, gt=0, le=1_000_000, description="该栋建筑面积(m2)")
+    type: str = Field("住宅", max_length=50, description="建筑类型")
+    basement: int = Field(0, ge=0, le=20, description="地下层数")
+
+
 class ProjectRequest(BaseModel):
     project_name: str = Field("", max_length=200)
     project_type: str = Field("住宅", max_length=50)
@@ -309,6 +316,17 @@ class ProjectRequest(BaseModel):
     green_rating: str = Field("", max_length=100)
     elevator_count: int = Field(0, ge=0, le=200)
     parking_count: int = Field(0, ge=0, le=1_000_000)
+    buildings: Optional[List[BuildingItem]] = Field(None, max_length=50, description="多栋建筑列表")
+
+
+def _normalize_buildings(req: ProjectRequest) -> List[Dict]:
+    """将 BuildingItem 列表转换为模型所需的 dict 列表，向后兼容单栋模式"""
+    if not req.buildings:
+        return []
+    return [
+        {"floors": b.floors, "area": b.area, "type": b.type, "basement": b.basement}
+        for b in req.buildings
+    ]
 
 
 # ==================== API 路由 ====================
@@ -446,6 +464,8 @@ def predict_project(req: ProjectRequest):
         "green_rating": req.green_rating,
         "elevator_count": req.elevator_count,
         "parking_count": req.parking_count,
+        # 多栋建筑
+        "buildings": _normalize_buildings(req),
     }
 
     # 默认模型：每个层级选一个

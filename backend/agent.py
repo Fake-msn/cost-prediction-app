@@ -609,7 +609,11 @@ class CostAgentManager:
             _has_area = any(kw in user_message for kw in ["平米", "平方米", "m²", "m2", "m3", "㎡", "万平"])
             _has_location = any(kw in user_message for kw in ["华北", "华东", "华南", "华中", "西南", "西北", "东北", "北京", "上海", "广州", "深圳", "成都", "杭州", "南京", "武汉"])
             if not (_has_type and _has_area and _has_location):
-                final_answer += "\n\n💡 为更精准预测，建议补充：建筑类型、总建筑面积、所在地区等参数"
+                final_answer += "\n\n 为更精准预测，建议补充：建筑类型、总建筑面积、所在地区等参数"
+            # 多栋建筑引导
+            _has_multi = any(kw in user_message for kw in ["栋", "楼栋", "小区", "组团", "标段"])
+            if _has_multi:
+                final_answer += "\n\n 检测到多栋建筑场景。您可以在预测时指定每栋楼的层数和类型（如：1栋20层住宅+1栋3层商业），系统将自动计算组合特征以提高预测精度。"
             react_steps.append({
                 "step": "observation",
                 "content": f"预测完成：总造价 {_format_money(prediction['fused_total_cost'])}，单方造价 {prediction['fused_unit_price']:.0f} 元/m²"

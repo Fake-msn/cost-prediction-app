@@ -14,7 +14,8 @@ let projectData = {
     build_year: 2026,
     decoration_level: '一般装修',
     stage: 'estimation',
-    selected_models: []
+    selected_models: [],
+    buildings: []
 };
 let projectResult = null;
 
@@ -237,7 +238,8 @@ function resetProject() {
         build_year: 2026,
         decoration_level: '一般装修',
         stage: 'estimation',
-        selected_models: []
+        selected_models: [],
+        buildings: []
     };
     projectResult = null;
     goToStep(1);
@@ -360,6 +362,16 @@ function renderStep1() {
                 <div id="upload-result" style="display: none; text-align: left; margin-top: 12px;"></div>
             </div>
         </div>
+
+        <!-- 多栋建筑 -->
+        <div class="form-card" id="multi-building-card">
+            <div class="form-card-title">多栋建筑 (可选)</div>
+            <div class="form-card-desc">如项目包含多栋不同楼层/类型的建筑（如小区），可在此分别配置。</div>
+            <div id="building-list" style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
+                ${renderBuildingRows()}
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="addBuildingRow()" style="margin-top:8px;">+ 添加一栋建筑</button>
+        </div>
     `;
     document.getElementById('step-content').innerHTML = html;
     bindStep1Events();
@@ -375,6 +387,40 @@ function bindStep1Events() {
             });
         });
 }
+
+// ===== 多栋建筑管理 =====
+function renderBuildingRows() {
+    if (!projectData.buildings || !projectData.buildings.length) return '';
+    return projectData.buildings.map((b, i) => `
+        <div class="building-row" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <span style="min-width:24px;color:var(--text-soft);">#${i+1}</span>
+            <input type="number" placeholder="楼层" value="${b.floors}" min="1" max="200"
+                onchange="projectData.buildings[${i}].floors=parseInt(this.value)||1"
+                style="width:80px;padding:6px;border:1px solid var(--border);border-radius:4px;">
+            <select onchange="projectData.buildings[${i}].type=this.value"
+                style="width:120px;padding:6px;border:1px solid var(--border);border-radius:4px;">
+                ${['住宅','商业','办公','学校','医院','工业','车库'].map(t =>
+                    `<option value="${t}" ${b.type===t?'selected':''}>${t}</option>`).join('')}
+            </select>
+            <input type="number" placeholder="面积(m2)" value="${b.area}" min="100" max="10000000"
+                onchange="projectData.buildings[${i}].area=parseFloat(this.value)||0"
+                style="width:120px;padding:6px;border:1px solid var(--border);border-radius:4px;">
+            <button class="btn btn-ghost btn-sm" onclick="removeBuildingRow(${i})" style="color:var(--danger);">x</button>
+        </div>
+    `).join('');
+}
+
+function addBuildingRow() {
+    if (!projectData.buildings) projectData.buildings = [];
+    projectData.buildings.push({ floors: 1, type: '住宅', area: 1000 });
+    document.getElementById('building-list').innerHTML = renderBuildingRows();
+}
+
+function removeBuildingRow(i) {
+    projectData.buildings.splice(i, 1);
+    document.getElementById('building-list').innerHTML = renderBuildingRows();
+}
+// ================================
 
 async function renderStep2() {
     const stages = [
@@ -724,9 +770,9 @@ async function runPrediction() {
     nextBtn.textContent = '预测中...';
 
     try {
-        const result = await api('/api/predict', {
+const result = await api('/api/predict', {
             method: 'POST',
-            body: JSON.stringify(projectData)
+            body: JSON.stringify({ ...projectData, buildings: projectData.buildings?.length ? projectData.buildings : undefined })
         });
         projectResult = result;
         goToStep(5);

@@ -2008,6 +2008,41 @@ class RealModelFactory:
         return model.train(df, "单方造价", self.models_dir)
 
 
+def extract_multi_building_features(project: Dict) -> Dict:
+    """从 buildings 列表或传统单栋参数提取多栋组合特征
+
+    Returns dict with keys: building_count, max_floor, min_floor, avg_floor,
+    floor_std, residential_ratio, commercial_ratio, mixed_types
+    """
+    buildings = project.get("buildings", [])
+    if not buildings:
+        return {
+            "building_count": 1,
+            "max_floor": project.get("floors", 10),
+            "min_floor": project.get("floors", 10),
+            "avg_floor": project.get("floors", 10),
+            "floor_std": 0,
+            "residential_ratio": 1.0 if "住宅" in str(project.get("project_type", "")) else 0,
+            "commercial_ratio": 1.0 if "商业" in str(project.get("project_type", "")) else 0,
+            "mixed_types": 0,
+        }
+    n = len(buildings)
+    floors = [b.get("floors", 0) or 0 for b in buildings]
+    types = [b.get("type", "住宅") for b in buildings]
+    areas = [b.get("area", 0) or 0 for b in buildings]
+    total_area = sum(areas) if sum(areas) > 0 else 1
+    return {
+        "building_count": n,
+        "max_floor": max(floors) if floors else 0,
+        "min_floor": min(floors) if floors else 0,
+        "avg_floor": round(sum(floors) / n, 1) if n > 0 else 0,
+        "floor_std": round((sum((f - sum(floors)/n)**2 for f in floors) / max(n, 1)) ** 0.5, 2) if n > 0 else 0,
+        "residential_ratio": round(sum(a for t, a in zip(types, areas) if "住宅" in t) / total_area, 3),
+        "commercial_ratio": round(sum(a for t, a in zip(types, areas) if "商业" in t) / total_area, 3),
+        "mixed_types": 1 if len(set(types)) > 1 else 0,
+    }
+
+
 def predict_with_real_models(
     factory: RealModelFactory,
     project: Dict,
@@ -2023,6 +2058,10 @@ def predict_with_real_models(
     - 保持向后兼容：fused_unit_price / fused_total_cost / composition 等字段不变
     """
     import math
+
+    # 多栋建筑组合特征
+    bf = extract_multi_building_features(project)
+    building_count = bf["building_count"]
 
     total_area = float(project.get("total_area", 10000))
     selected_set = set(selected_model_ids)
@@ -2090,6 +2129,12 @@ def predict_with_real_models(
             scale_note = f"大型项目规模调整（×{scale_factor:.2f}）：面积>100000m²，规模经济"
         else:
             scale_note = "标准规模项目，无需规模调整"
+
+    # 多栋建筑楼层分布修正
+    if building_count > 1 and bf["floor_std"] > 0:
+        complexity_adj = 1.0 + min(bf["floor_std"] / 50.0, 0.15)
+        scale_factor *= complexity_adj
+        scale_note += f" | 多栋复杂度修正（x{complexity_adj:.2f}）"
 
     if l1_predictions:
         total_weight = sum(p["weight"] for p in l1_predictions)
@@ -2258,6 +2303,10 @@ def predict_with_real_models(
 
     # 向后兼容：composition 字段（基于建筑类型差异化系数）
     comp_coeffs = get_building_coefficients(project)["composition"]
+    # 多栋混合类型修正
+    if bf["mixed_types"]:
+        if comp_coeffs.get("直接工程费", 0) > 0:
+            comp_coeffs["直接工程费"] += 0.02
     # 根据装修标准微调
     decoration = project.get("decoration_level", project.get("装修标准", "一般装修"))
     if decoration == "精装修":

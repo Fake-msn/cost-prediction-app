@@ -40,6 +40,8 @@ FIELD_MAP = {
     '总建筑面积': 'total_area',
     '项目总造价': 'total_cost',
     '单方造价': 'unit_price',
+    '栋数': 'building_count',
+    '建筑栋数': 'building_count',
 }
 
 # 质量等级映射
