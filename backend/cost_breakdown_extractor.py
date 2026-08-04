@@ -105,8 +105,10 @@ def find_source_excel(project_name: str, source_dir: str) -> Optional[str]:
             continue
 
         # 计算重叠的关键词
+        # 降级阈值：至少 1 个长关键词 (≥4字) 匹配即可
         overlap = len(set(keywords) & set(entry_keywords))
-        if overlap >= min(2, len(keywords)):
+        long_match = any(len(k) >= 4 and k in entry for k in keywords)
+        if overlap >= min(2, len(keywords)) or (len(keywords) <= 3 and long_match):
             # 找到匹配的文件夹，在其中找主 Excel
             for fname in os.listdir(entry_path):
                 if fname.endswith('.xlsx') and '项目信息' not in fname:
@@ -600,7 +602,7 @@ def insert_breakdown(db_path: str, project_id: str, data: Dict):
              foundation_type, extraction_date, source_file,
              e2_count, f11_count, e3_count, h13_count, extraction_errors,
              concrete_grade, steel_grade)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, [
             project_id,
             data.get('project_name', ''),
@@ -752,8 +754,8 @@ if __name__ == '__main__':
         print(f"\n=== 提取完成 ===")
         print(f"总数: {result['total']} | 成功: {result['success']} | 失败: {result['failed']}")
         for d in result['details']:
-            status_icon = '✅' if d['status'] == 'ok' else '❌'
-            labor_info = f"人工费={d.get('labor_source','?')}" if d['status'] == 'ok' else d.get('reason','')
+            status_icon = '[OK]' if d['status'] == 'ok' else '[FAIL]'
+            labor_info = f"labor={d.get('labor_source','?')}" if d['status'] == 'ok' else d.get('reason','')
             print(f"  {status_icon} {d['name'][:30]} | E2={d.get('e2_count',0)} F11={d.get('f11_count',0)} E3={d.get('e3_count',0)} | {labor_info}")
 
     elif len(sys.argv) > 1 and sys.argv[1] == '--test':
