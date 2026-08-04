@@ -173,16 +173,33 @@ if errorlevel 1 (
     )
 )
 
-:: ---- Verify DuckDB integrity (auto-recover from corruption) ----
+:: ---- DuckDB integrity check (NON-DESTRUCTIVE - preserves training data) ----
 if exist "data\cost_prediction.duckdb" (
-    python -c "import duckdb; c=duckdb.connect(r'data\cost_prediction.duckdb',read_only=True); c.execute('SELECT 1 FROM boq_items LIMIT 1'); c.close()" >nul 2>&1
+    echo [CHECK] Verifying DuckDB database...
+    python -c "import duckdb,os; db='data/cost_prediction.duckdb'; s=os.path.getsize(db); c=duckdb.connect(db,read_only=True); b=c.execute('SELECT COUNT(*) FROM boq_items').fetchone()[0]; m=c.execute('SELECT COUNT(*) FROM project_meta').fetchone()[0]; c.close(); print(f'{s}|{b}|{m}')" > "%TEMP%\cpa_db.txt" 2>&1
     if errorlevel 1 (
-        echo [WARNING] DuckDB database appears corrupted.
-        echo [WARNING] Removing it now. It will be rebuilt from Excel training data.
-        del "data\cost_prediction.duckdb"
+        echo.
+        echo [ERROR] DuckDB database is UNREADABLE.
+        echo.
+        echo   !!! DATA LOSS WARNING !!!
+        echo   DuckDB contains ~25x MORE training data than Excel files.
+        echo   Auto-rebuilding from Excel will severely reduce model accuracy.
+        echo.
+        echo   If you are sure you want to delete and rebuild, type DELETE:
+        set /p DBCONFIRM="       Confirm [type DELETE]: "
+        if /i "!DBCONFIRM!"=="DELETE" (
+            echo [INFO] Removing corrupted DuckDB...
+            del "data\cost_prediction.duckdb"
+        ) else (
+            echo [INFO] Database preserved. Attempting to start anyway...
+        )
     ) else (
-        echo [OK] DuckDB database integrity verified.
+        for /f "tokens=1-3 delims=|" %%a in (%TEMP%\cpa_db.txt) do (
+            echo [OK] DuckDB: %%a bytes ^| boq_items=%%b ^| project_meta=%%c
+        )
+        del "%TEMP%\cpa_db.txt" >nul 2>&1
     )
+    echo.
 )
 
 :: [4/4] Start
@@ -211,7 +228,10 @@ echo   Look at the messages ABOVE this line to find the cause.
 echo.
 echo   Common fixes:
 echo   1. Missing models: ensure models_cache\ has .joblib files
-echo   2. Database issue: delete data\cost_prediction.duckdb and re-run
+echo   2. Database error: DO NOT blindly delete DuckDB -
+echo      it contains 25x more data than Excel. First try:
+echo      - Close ALL programs using the project
+echo      - Reboot and re-run this script
 echo   3. Port conflict: close other programs using port 8000
 echo   4. Dependency issue: run manually:
 echo      venv\Scripts\activate ^&^& python -m pip install -r backend\requirements.txt
