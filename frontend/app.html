@@ -22,7 +22,7 @@
             <button class="btn btn-ghost btn-sm" id="btn-back" style="display:none">返回上一步</button>
             <button class="btn btn-ghost btn-sm" id="btn-llm-config">⚙ LLM 配置</button>
             <button class="btn btn-ghost btn-sm" id="btn-new-project">+ 新建项目</button>
-            <button class="btn btn-ghost btn-sm sidebar-toggle-btn" id="btn-sidebar-toggle" aria-label="切换侧边栏" style="display:none">
+            <button class="btn btn-ghost btn-sm sidebar-toggle-btn" id="btn-sidebar-toggle" aria-label="切换侧边栏" aria-expanded="false" style="display:none">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
                     <rect x="2" y="3" width="12" height="10" rx="1"/>
                     <line x1="6" y1="3" x2="6" y2="13"/>
@@ -34,7 +34,7 @@
     <!-- 主体三栏布局 -->
     <div class="app-shell">
         <!-- 左侧：历史会话 + 数据管理 -->
-        <aside class="sidebar" role="complementary" aria-label="侧边栏导航">
+        <aside class="sidebar collapsed" role="complementary" aria-label="侧边栏导航">
             <div class="sidebar-tabs">
                 <button class="tab-btn active" data-tab="sessions">💬 会话</button>
                 <button class="tab-btn" data-tab="data">📊 数据</button>
