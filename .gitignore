@@ -14,6 +14,8 @@ env/
 data/history.json
 data/uploads/
 data/*.duckdb
+# DB backups / rollback baselines are large binaries, never commit
+data/backups/
 
 # IDE
 .idea/
@@ -44,3 +46,9 @@ agent_scope_cache/
 
 # Stress test temp dir
 _stress_test_tmp/
+
+# DuckDB 2.0 upgrade verification scratch (isolated nightly env + diff outputs)
+_duckdb2_tmp/
+
+# ModelScope deployment staging
+.modelscope-deploy/

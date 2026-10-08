@@ -116,39 +116,34 @@ def _cleanup_expired_uploads():
     清理两类：
     1. prediction_uploads 表中 expires_at 已过期的记录
     2. uploads 目录中与数据库记录无关的孤儿文件
+
+    DB 访问统一经 data_loader（H7）；写操作由 data_loader 内部锁串行化（H5）。
     """
     try:
-        import duckdb
-        conn = duckdb.connect(DB_PATH)
-        try:
-            expired = conn.execute(
-                "SELECT task_id FROM prediction_uploads WHERE expires_at < CURRENT_TIMESTAMP LIMIT ?",
-                [UPLOAD_CLEANUP_BATCH],
-            ).fetchall()
-            for (tid,) in expired:
-                conn.execute("DELETE FROM prediction_uploads WHERE task_id = ?", [tid])
-                for f in os.listdir(UPLOAD_DIR):
-                    if f.startswith(tid):
-                        try:
-                            os.remove(os.path.join(UPLOAD_DIR, f))
-                        except OSError:
-                            pass
-            # 清理孤儿文件（目录中未被任何记录引用的文件）
-            active = {r[0] for r in conn.execute("SELECT task_id FROM prediction_uploads").fetchall()}
-            removed = 0
+        expired_ids = data_loader.list_expired_upload_ids(UPLOAD_CLEANUP_BATCH)
+        for tid in expired_ids:
             for f in os.listdir(UPLOAD_DIR):
-                fname = os.path.basename(f)
-                tid_part = fname.split(".")[0][:8]
-                if len(tid_part) == 8 and tid_part not in active:
+                if f.startswith(tid):
                     try:
                         os.remove(os.path.join(UPLOAD_DIR, f))
-                        removed += 1
                     except OSError:
                         pass
-            if expired or removed:
-                logger.info("[cleanup] 过期记录 %d 条，孤儿文件 %d 个", len(expired), removed)
-        finally:
-            conn.close()
+        if expired_ids:
+            data_loader.delete_uploads(expired_ids)
+        # 清理孤儿文件（目录中未被任何记录引用的文件）
+        active = data_loader.list_active_upload_ids()
+        removed = 0
+        for f in os.listdir(UPLOAD_DIR):
+            fname = os.path.basename(f)
+            tid_part = fname.split(".")[0][:8]
+            if len(tid_part) == 8 and tid_part not in active:
+                try:
+                    os.remove(os.path.join(UPLOAD_DIR, f))
+                    removed += 1
+                except OSError:
+                    pass
+        if expired_ids or removed:
+            logger.info("[cleanup] 过期记录 %d 条，孤儿文件 %d 个", len(expired_ids), removed)
     except Exception as e:
         logger.warning("[cleanup] 上传文件清理失败: %s", e)
 
@@ -992,15 +987,13 @@ def upload_for_prediction(file: UploadFile = File(...)):
         extractor = FeatureExtractor()
         features = extractor.extract(result)
 
-        import duckdb
-        conn = duckdb.connect(DB_PATH)
-        conn.execute(
-            "INSERT INTO prediction_uploads (task_id, filename, file_format, extracted_features, expires_at) VALUES (?, ?, ?, ?, ?)",
-            [task_id, file.filename, result.file_format,
-             json.dumps(features.to_dict(), ensure_ascii=False),
-             (datetime.now() + timedelta(hours=UPLOAD_TTL_HOURS)).isoformat()]
+        data_loader.record_upload(
+            task_id,
+            file.filename,
+            result.file_format,
+            json.dumps(features.to_dict(), ensure_ascii=False),
+            (datetime.now() + timedelta(hours=UPLOAD_TTL_HOURS)).isoformat(),
         )
-        conn.close()
 
         return {
             "task_id": task_id,
@@ -1029,13 +1022,7 @@ def upload_for_prediction(file: UploadFile = File(...)):
 @app.get("/api/predict/upload/{task_id}/result")
 async def get_upload_result(task_id: str):
     """获取上传文件的解析结果"""
-    import duckdb
-    conn = duckdb.connect(DB_PATH, read_only=True)
-    row = conn.execute(
-        "SELECT task_id, filename, file_format, uploaded_at, extracted_features, expires_at FROM prediction_uploads WHERE task_id = ?",
-        [task_id]
-    ).fetchone()
-    conn.close()
+    row = data_loader.get_upload(task_id)
 
     if not row:
         raise HTTPException(404, "未找到该上传记录")
@@ -1053,10 +1040,7 @@ async def get_upload_result(task_id: str):
 @app.delete("/api/predict/upload/{task_id}")
 async def delete_upload(task_id: str):
     """删除上传记录及临时文件"""
-    import duckdb
-    conn = duckdb.connect(DB_PATH)
-    conn.execute("DELETE FROM prediction_uploads WHERE task_id = ?", [task_id])
-    conn.close()
+    data_loader.delete_upload(task_id)
 
     for f in os.listdir(UPLOAD_DIR):
         if f.startswith(task_id):
@@ -1113,4 +1097,5 @@ if __name__ == "__main__":
     if _workers > 1:
         print(f"⚙️  已启用多进程模式：{_workers} workers（会话/项目状态为各进程独立副本）")
 
-    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info", workers=_workers)
+    _port = int(os.environ.get("PORT", "8000"))
+    uvicorn.run(app, host="0.0.0.0", port=_port, log_level="info", workers=_workers)

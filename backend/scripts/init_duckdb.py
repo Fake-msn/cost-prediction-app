@@ -150,7 +150,11 @@ def init_database(db_path: str = None) -> str:
                 buildings_json VARCHAR,
                 max_floor INTEGER,
                 min_floor INTEGER,
-                mixed_types BOOLEAN DEFAULT FALSE
+                mixed_types BOOLEAN DEFAULT FALSE,
+                above_ground_floors INTEGER,
+                under_ground_floors INTEGER,
+                decoration_standard VARCHAR,
+                foundation_type VARCHAR
             )
         """)
         conn.execute("""
@@ -197,6 +201,17 @@ def init_database(db_path: str = None) -> str:
                 adjustment_factor DOUBLE
             )
         """)
+        # 上传文件解析记录（main.py 的 /api/predict/upload 生命周期使用）
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS prediction_uploads (
+                task_id VARCHAR PRIMARY KEY,
+                filename VARCHAR,
+                file_format VARCHAR,
+                uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                extracted_features VARCHAR,
+                expires_at TIMESTAMP
+            )
+        """)
         
         # 插入默认价格指数（2020-2026）
         conn.execute("""
@@ -216,6 +231,12 @@ def init_database(db_path: str = None) -> str:
         conn.execute("ALTER TABLE project_meta ADD COLUMN IF NOT EXISTS max_floor INTEGER")
         conn.execute("ALTER TABLE project_meta ADD COLUMN IF NOT EXISTS min_floor INTEGER")
         conn.execute("ALTER TABLE project_meta ADD COLUMN IF NOT EXISTS mixed_types BOOLEAN DEFAULT FALSE")
+        # data_loader._load_duckdb_dataframe 直接 SELECT 这些列；缺失会触发 binder error
+        # 并被上层 except 静默吞掉，导致 DuckDB 元数据无法合并进训练集。补齐 schema 消除该隐患。
+        conn.execute("ALTER TABLE project_meta ADD COLUMN IF NOT EXISTS above_ground_floors INTEGER")
+        conn.execute("ALTER TABLE project_meta ADD COLUMN IF NOT EXISTS under_ground_floors INTEGER")
+        conn.execute("ALTER TABLE project_meta ADD COLUMN IF NOT EXISTS decoration_standard VARCHAR")
+        conn.execute("ALTER TABLE project_meta ADD COLUMN IF NOT EXISTS foundation_type VARCHAR")
 
         print(f"[OK] DuckDB 数据库已初始化: {db_path}")
         
