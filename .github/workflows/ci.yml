@@ -51,7 +51,22 @@ jobs:
           pytest backend/tests/ -v --tb=short --cov=backend --cov-report=xml --cov-report=html
         env:
           PYTHONPATH: ${{ github.workspace }}
-      
+
+      # 真实 DuckDB 引擎门禁（非 mock）：backend/tests 用 conftest 全局 mock 掉 duckdb，
+      # 无法捕获存储/接口回归。以下两步对真实安装的 duckdb（pin <2.0）跑通核心构造。
+      # 注意：绝不使用 pip --pre，避免拉到 2.0 dev 预发布版（见 DUCKDB2_UPGRADE_RUNBOOK.md）。
+      - name: DuckDB compatibility audit (real engine)
+        run: |
+          python backend/scripts/duckdb2_compat_audit.py
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+
+      - name: DuckDB integration tests (real engine, non-mock)
+        run: |
+          pytest backend/tests_integration/ -v --tb=short
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
         if: always()

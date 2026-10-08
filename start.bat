@@ -185,11 +185,12 @@ if exist "data\cost_prediction.duckdb" (
         echo   DuckDB contains ~25x MORE training data than Excel files.
         echo   Auto-rebuilding from Excel will severely reduce model accuracy.
         echo.
-        echo   If you are sure you want to delete and rebuild, type DELETE:
+        echo   If you are sure you want to move it aside and rebuild, type DELETE:
         set /p DBCONFIRM="       Confirm [type DELETE]: "
         if /i "!DBCONFIRM!"=="DELETE" (
-            echo [INFO] Removing corrupted DuckDB...
-            del "data\cost_prediction.duckdb"
+            echo [INFO] Moving unreadable DuckDB aside for recovery - not deleting...
+            ren "data\cost_prediction.duckdb" "cost_prediction.corrupt-%RANDOM%.duckdb"
+            echo [INFO] Original file preserved under data\cost_prediction.corrupt-*.duckdb
         ) else (
             echo [INFO] Database preserved. Attempting to start anyway...
         )

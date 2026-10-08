@@ -47,7 +47,8 @@ def populate_price_index(conn: duckdb.DuckDBPyConnection) -> None:
 def normalize_project_prices(conn: duckdb.DuckDBPyConnection) -> dict:
     """
     对每个有 build_year 的项目，计算 price_adjust_factor 并更新 boq_items。
-    使用 Python 计算 factor 后直接嵌入 SQL（避免 DuckDB 参数绑定在 UPDATE 中的问题）。
+    全部使用绑定参数（? 占位）——实测 DuckDB 1.5.x/2.x 的 UPDATE SET 子句均支持
+    参数绑定，无需再用 f-string 拼接 SQL（消除注入面与多余规避）。
     """
     projects = conn.execute(
         "SELECT project_id, build_year FROM project_meta"
@@ -62,9 +63,6 @@ def normalize_project_prices(conn: duckdb.DuckDBPyConnection) -> dict:
     }
 
     for project_id, build_year in projects:
-        # 转义 project_id 防止 SQL 注入（项目 ID 是 hex 字符串，安全）
-        pid = str(project_id).replace("'", "''")
-
         if build_year is not None and build_year in PRICE_INDICES:
             factor = round(BASE_INDEX / PRICE_INDICES[build_year], 6)
             stats['projects_with_year'] += 1
@@ -72,38 +70,40 @@ def normalize_project_prices(conn: duckdb.DuckDBPyConnection) -> dict:
 
             # 先统计需要更新的行数
             cnt = conn.execute(
-                f"SELECT COUNT(*) FROM boq_items WHERE project_id = '{pid}' AND comp_unit_price_adj IS NULL"
+                "SELECT COUNT(*) FROM boq_items WHERE project_id = ? AND comp_unit_price_adj IS NULL",
+                [project_id]
             ).fetchone()[0]
 
             if cnt > 0:
-                conn.execute(f"""
+                conn.execute("""
                     UPDATE boq_items
-                    SET price_adjust_factor = {factor},
-                        comp_unit_price_adj = ROUND(comp_unit_price * {factor}, 4),
-                        total_price_adj    = ROUND(total_price * {factor}, 4),
-                        price_base_year    = {BASE_YEAR}
-                    WHERE project_id = '{pid}'
+                    SET price_adjust_factor = ?,
+                        comp_unit_price_adj = ROUND(comp_unit_price * ?, 4),
+                        total_price_adj    = ROUND(total_price * ?, 4),
+                        price_base_year    = ?
+                    WHERE project_id = ?
                       AND comp_unit_price_adj IS NULL
-                """)
+                """, [factor, factor, factor, BASE_YEAR, project_id])
                 stats['items_adjusted'] += cnt
 
         else:
             stats['projects_without_year'] += 1
 
             cnt = conn.execute(
-                f"SELECT COUNT(*) FROM boq_items WHERE project_id = '{pid}' AND comp_unit_price_adj IS NULL"
+                "SELECT COUNT(*) FROM boq_items WHERE project_id = ? AND comp_unit_price_adj IS NULL",
+                [project_id]
             ).fetchone()[0]
 
             if cnt > 0:
-                conn.execute(f"""
+                conn.execute("""
                     UPDATE boq_items
-                    SET price_adjust_factor = 1.0,
+                    SET price_adjust_factor = ?,
                         comp_unit_price_adj = comp_unit_price,
                         total_price_adj    = total_price,
-                        price_base_year    = {BASE_YEAR}
-                    WHERE project_id = '{pid}'
+                        price_base_year    = ?
+                    WHERE project_id = ?
                       AND comp_unit_price_adj IS NULL
-                """)
+                """, [1.0, BASE_YEAR, project_id])
                 stats['items_no_change'] += cnt
 
     return stats

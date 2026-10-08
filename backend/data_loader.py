@@ -7,6 +7,7 @@ import io
 import os
 import json
 import random
+import threading
 from typing import Dict, List, Optional
 from datetime import datetime, date
 import pandas as pd
@@ -18,6 +19,10 @@ try:
     HAS_DUCKDB = True
 except ImportError:
     HAS_DUCKDB = False
+
+# 写操作串行化锁：DuckDB 为单写者模型，避免多线程（FastAPI 线程池 / 后台清理）
+# 同时对同一库文件发起写连接造成冲突。读路径使用 read_only=True，不占用此锁。
+_DB_WRITE_LOCK = threading.Lock()
 
 
 REQUIRED_FIELDS = [
@@ -570,6 +575,96 @@ class DataLoader:
             ]
         finally:
             conn.close()
+
+    # ============================================================
+    # prediction_uploads 生命周期（原 main.py 直连 DuckDB，现收敛至此 — H7）
+    # 写操作统一持 _DB_WRITE_LOCK 串行化（H5）；读操作使用 read_only 连接。
+    # ============================================================
+
+    def _uploads_table_exists(self, conn) -> bool:
+        tables = conn.execute(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
+        ).fetchall()
+        return 'prediction_uploads' in [t[0] for t in tables]
+
+    def record_upload(self, task_id: str, filename: str, file_format: str,
+                      extracted_features_json: str, expires_at_iso: str) -> None:
+        """写入一条上传解析记录（写操作，持锁串行化）。"""
+        if not HAS_DUCKDB:
+            return
+        with _DB_WRITE_LOCK:
+            conn = duckdb.connect(self.db_path)
+            try:
+                conn.execute(
+                    "INSERT INTO prediction_uploads "
+                    "(task_id, filename, file_format, extracted_features, expires_at) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    [task_id, filename, file_format, extracted_features_json, expires_at_iso]
+                )
+            finally:
+                conn.close()
+
+    def get_upload(self, task_id: str):
+        """读取单条上传记录，返回 tuple 或 None（只读连接）。"""
+        if not HAS_DUCKDB or not os.path.exists(self.db_path):
+            return None
+        conn = duckdb.connect(self.db_path, read_only=True)
+        try:
+            if not self._uploads_table_exists(conn):
+                return None
+            return conn.execute(
+                "SELECT task_id, filename, file_format, uploaded_at, extracted_features, expires_at "
+                "FROM prediction_uploads WHERE task_id = ?",
+                [task_id]
+            ).fetchone()
+        finally:
+            conn.close()
+
+    def list_expired_upload_ids(self, limit: int) -> List[str]:
+        """返回已过期的 task_id 列表（只读连接）。"""
+        if not HAS_DUCKDB or not os.path.exists(self.db_path):
+            return []
+        conn = duckdb.connect(self.db_path, read_only=True)
+        try:
+            if not self._uploads_table_exists(conn):
+                return []
+            rows = conn.execute(
+                "SELECT task_id FROM prediction_uploads WHERE expires_at < CURRENT_TIMESTAMP LIMIT ?",
+                [limit]
+            ).fetchall()
+            return [r[0] for r in rows]
+        finally:
+            conn.close()
+
+    def list_active_upload_ids(self) -> set:
+        """返回全部上传记录的 task_id 集合（只读连接）。"""
+        if not HAS_DUCKDB or not os.path.exists(self.db_path):
+            return set()
+        conn = duckdb.connect(self.db_path, read_only=True)
+        try:
+            if not self._uploads_table_exists(conn):
+                return set()
+            return {r[0] for r in conn.execute("SELECT task_id FROM prediction_uploads").fetchall()}
+        finally:
+            conn.close()
+
+    def delete_uploads(self, task_ids) -> None:
+        """批量删除上传记录（写操作，持锁串行化）。"""
+        if not HAS_DUCKDB or not task_ids:
+            return
+        with _DB_WRITE_LOCK:
+            conn = duckdb.connect(self.db_path)
+            try:
+                if not self._uploads_table_exists(conn):
+                    return
+                for tid in task_ids:
+                    conn.execute("DELETE FROM prediction_uploads WHERE task_id = ?", [tid])
+            finally:
+                conn.close()
+
+    def delete_upload(self, task_id: str) -> None:
+        """删除单条上传记录（写操作，持锁串行化）。"""
+        self.delete_uploads([task_id])
 
     def get_history(self, limit: int = 50) -> List[Dict]:
         return self.history[-limit:]
