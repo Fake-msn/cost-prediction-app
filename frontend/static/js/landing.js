@@ -12,9 +12,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // 滚动监听：高亮当前所在区域的导航项
-    const navLinks = document.querySelectorAll('.nav-links a[href^="#"]');
-    const sections = Array.from(navLinks)
+    // 滚动监听：高亮当前所在区域的导航项（桌面 + 移动端）
+    const allNavLinks = document.querySelectorAll('.nav-links a[href^="#"], .mobile-nav-link[href^="#"]');
+    const sections = Array.from(allNavLinks)
         .map(link => document.querySelector(link.getAttribute('href')))
         .filter(Boolean);
 
@@ -26,7 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 currentId = section.id;
             }
         }
-        navLinks.forEach(link => {
+        allNavLinks.forEach(link => {
             link.classList.toggle('active', link.getAttribute('href') === '#' + currentId);
         });
     }
