@@ -42,6 +42,19 @@
     color: var(--text-soft);
 }
 .nav-links a:hover { color: var(--text); }
+.nav-links a {
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    transition: background 0.2s, color 0.2s;
+}
+.nav-links a.active {
+    background: rgba(0, 0, 0, 0.08);
+    color: var(--text);
+}
+.nav-links a.btn-primary.active {
+    background: rgba(17, 17, 17, 0.15);
+    color: var(--text);
+}
 
 /* Hero */
 .hero {
@@ -171,49 +184,43 @@ section { padding: 80px 0; }
 
 /* Workflow */
 .workflow-steps {
-    display: flex;
-    justify-content: space-between;
-    gap: 20px;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 24px;
 }
 .workflow-step {
-    flex: 1;
-    text-align: center;
     position: relative;
-}
-.workflow-step:not(:last-child)::after {
-    content: "";
-    position: absolute;
-    top: 24px;
-    left: calc(50% + 30px);
-    right: calc(-50% + 30px);
-    height: 1px;
-    background: var(--border);
 }
 .step-num {
-    width: 48px;
-    height: 48px;
-    margin: 0 auto 16px;
-    background: var(--bg-soft);
-    border: 2px solid var(--border);
+    width: 22px;
+    height: 22px;
+    background: var(--primary);
     border-radius: 50%;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 18px;
+    font-size: 12px;
     font-weight: 600;
-    color: var(--text-soft);
-    position: relative;
-    z-index: 1;
+    color: #fff;
+    flex-shrink: 0;
+}
+.workflow-step-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    padding-left: 2em;
 }
 .workflow-step h4 {
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 600;
-    margin-bottom: 6px;
+    margin: 0;
 }
 .workflow-step p {
     font-size: 13px;
     color: var(--text-soft);
     line-height: 1.5;
+    padding-left: 3em;
 }
 
 /* Pricing */
@@ -284,10 +291,91 @@ section { padding: 80px 0; }
     border-top: 1px solid var(--border);
 }
 
+/* ===== Hamburger menu (mobile) ===== */
+.hamburger-btn {
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    width: 44px;
+    height: 44px;
+    padding: 10px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    z-index: 110;
+}
+.hamburger-line {
+    display: block;
+    width: 100%;
+    height: 2px;
+    background: var(--text);
+    border-radius: 2px;
+    transition: all 0.3s ease;
+}
+.mobile-nav-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 105;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+.mobile-nav-content {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 280px;
+    max-width: 80vw;
+    height: 100%;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    padding: 80px 24px 24px;
+    gap: 8px;
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
+}
+.mobile-nav-link {
+    display: block;
+    padding: 14px 16px;
+    font-size: 16px;
+    color: var(--text);
+    border-radius: var(--radius);
+    transition: background 0.15s;
+    min-height: 44px;
+}
+.mobile-nav-link:hover { background: var(--bg-soft); }
+
+.mobile-nav-open .mobile-nav-overlay { display: block; opacity: 1; }
+.mobile-nav-open .mobile-nav-content { transform: translateX(0); }
+.mobile-nav-open .hamburger-line:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+.mobile-nav-open .hamburger-line:nth-child(2) { opacity: 0; }
+.mobile-nav-open .hamburger-line:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
 @media (max-width: 768px) {
+    .hamburger-btn { display: flex; }
+    .nav-links { display: none; }
     .feature-grid, .pricing-grid { grid-template-columns: 1fr; }
-    .workflow-steps { flex-direction: column; }
-    .workflow-step:not(:last-child)::after { display: none; }
+    .workflow-steps { grid-template-columns: 1fr; gap: 16px; }
     .hero-title { font-size: 36px; }
+    .hero-subtitle br { display: none; }
     .stat-num { font-size: 32px; }
+    .stats-inner { flex-wrap: wrap; gap: 24px; }
+    .hero-cta { flex-direction: column; gap: 8px; }
+    .hero-cta .btn { width: 100%; max-width: 300px; }
+    section { padding: 48px 0; }
+    .section-head h2 { font-size: 28px; }
+    .pricing-card.highlight { transform: none; }
+}
+
+@media (max-width: 480px) {
+    .hero { padding: 60px 0 48px; }
+    .hero-title { font-size: 28px; }
+    .hero-badge { font-size: 12px; padding: 4px 10px; }
+    .stat-num { font-size: 28px; }
+    .section-head h2 { font-size: 24px; }
+    .feature-card { padding: 20px 16px; }
+    .pricing-card { padding: 24px 16px; }
 }
