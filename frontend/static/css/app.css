@@ -1,7 +1,7 @@
 /* ============================================
    应用主界面样式 - 三栏布局
    ============================================ */
-.app-page { background: var(--bg); height: 100vh; overflow: hidden; }
+.app-page { background: var(--bg); height: 100dvh; overflow: hidden; }
 
 .app-header {
     display: flex;
@@ -48,7 +48,7 @@
 .app-shell {
     display: grid;
     grid-template-columns: 260px 1fr;
-    height: calc(100vh - 56px);
+    height: calc(100dvh - 56px);
 }
 
 /* ===== 侧边栏 ===== */
@@ -1072,29 +1072,58 @@
    响应式适配（L1）— 平板/手机端布局
    ============================================ */
 @media (max-width: 900px) {
-    /* 三栏 → 上下两段：侧边栏置顶收缩，主内容占满 */
     .app-shell {
         grid-template-columns: 1fr;
-        grid-template-rows: 180px 1fr;
+        grid-template-rows: auto 1fr;
         overflow-y: auto;
     }
     .sidebar {
         border-right: none;
         border-bottom: 1px solid var(--border);
+        max-height: 200px;
+        overflow: hidden;
+        transition: max-height 0.3s ease;
+    }
+    .sidebar.collapsed {
+        max-height: 0;
+        border-bottom: none;
+    }
+    .sidebar-toggle-btn {
+        display: inline-flex !important;
     }
     .sidebar-content { padding: 8px 12px; }
     .session-list {
         flex-direction: row;
         overflow-x: auto;
         padding-bottom: 8px;
+        -webkit-overflow-scrolling: touch;
     }
-    .session-item { flex-shrink: 0; max-width: 220px; }
-    /* 表单/阶段卡片单列 */
+    .session-item { flex-shrink: 0; max-width: 220px; min-height: 44px; display: flex; align-items: center; }
+    .wizard-area { padding: 16px 16px 24px; }
+    .step-indicator { padding: 0; overflow-x: auto; justify-content: flex-start; gap: 4px; -webkit-overflow-scrolling: touch; }
+    .step { min-width: 80px; }
+    .step-desc { display: none; }
     .form-grid { grid-template-columns: 1fr; }
     .stage-options { grid-template-columns: 1fr; }
     .feature-grid, .pricing-grid { grid-template-columns: 1fr; }
-    /* 对话输入区 */
-    .chat-input-wrap { flex-direction: column; }
+    .chat-messages { padding: 12px 16px; }
+    .chat-input-wrap { padding: 12px 16px 16px; }
+    .chat-actions-bar { padding: 4px 16px 8px; }
+    .step-content h2 { font-size: 22px; }
+    .result-summary { flex-direction: column; align-items: flex-start; gap: 12px; }
+    .result-summary-value { font-size: 28px; }
+    .result-summary-actions { width: 100%; }
+    .composition-row {
+        grid-template-columns: 20px 1fr 80px;
+        gap: 8px;
+    }
+    .composition-bar { display: none; }
+    .composition-ratio { display: none; }
+    .modal { padding: 12px; }
+    .modal-content { max-height: 90vh; }
+    .modal-header { padding: 12px 16px; }
+    .modal-body { padding: 16px; }
+    .modal-footer { padding: 12px 16px; flex-wrap: wrap; }
 }
 
 @media (max-width: 480px) {
@@ -1102,17 +1131,42 @@
     .app-header { padding: 0 12px; gap: 8px; }
     .header-title { font-size: 13px; }
     .header-badge { display: none; }
-    .app-shell { grid-template-rows: 140px 1fr; }
-    .wizard-steps { overflow-x: auto; }
-    .wizard-step { min-width: 120px; }
+    .header-actions { gap: 4px; }
+    .header-actions .btn { padding: 6px 8px; font-size: 12px; }
+    .sidebar { max-height: 160px; }
+    .sidebar.collapsed { max-height: 0; }
+    .app-shell { grid-template-rows: auto 1fr; }
+    .wizard-area { padding: 12px 12px 20px; }
+    .step-indicator { padding: 0; }
+    .step { min-width: 64px; }
+    .step-circle { width: 28px; height: 28px; font-size: 12px; }
+    .step-name { font-size: 11px; }
     .param-grid { grid-template-columns: 1fr; }
-    /* 结果展示列适配 */
     .composition-row {
         grid-template-columns: 20px 1fr 70px;
-        gap: 8px;
+        gap: 6px;
+        padding: 8px;
     }
+    .composition-name { font-size: 13px; }
+    .composition-amount { font-size: 13px; }
+    .composition-children { margin-left: 20px; }
     .result-cards { flex-direction: column; }
     .card-grid { grid-template-columns: 1fr; }
-    /* 上传区域 */
     #upload-section { padding: 16px; }
+    .form-card { padding: 16px; }
+    .form-card-title { font-size: 15px; }
+    .stage-card { padding: 16px; }
+    .model-item { padding: 12px; }
+    .result-summary { padding: 16px; }
+    .result-summary-value { font-size: 24px; }
+    .result-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .result-tab { white-space: nowrap; padding: 8px 12px; font-size: 13px; }
+    .chat-welcome { padding: 32px 12px; }
+    .chat-welcome h3 { font-size: 18px; }
+    .welcome-icon { font-size: 36px; }
+    .suggestion-chip { font-size: 12px; padding: 6px 12px; }
+    .toast { left: 16px; right: 16px; bottom: 16px; text-align: center; }
+    .modal-content { max-height: 95vh; border-radius: var(--radius); }
+    .modal-header h3 { font-size: 15px; }
+    .modal-body { padding: 12px; font-size: 13px; }
 }

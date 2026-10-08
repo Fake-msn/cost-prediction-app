@@ -22,13 +22,19 @@
             <button class="btn btn-ghost btn-sm" id="btn-back" style="display:none">返回上一步</button>
             <button class="btn btn-ghost btn-sm" id="btn-llm-config">⚙ LLM 配置</button>
             <button class="btn btn-ghost btn-sm" id="btn-new-project">+ 新建项目</button>
+            <button class="btn btn-ghost btn-sm sidebar-toggle-btn" id="btn-sidebar-toggle" aria-label="切换侧边栏" aria-expanded="false" style="display:none">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <rect x="2" y="3" width="12" height="10" rx="1"/>
+                    <line x1="6" y1="3" x2="6" y2="13"/>
+                </svg>
+            </button>
         </div>
     </header>
 
     <!-- 主体三栏布局 -->
     <div class="app-shell">
         <!-- 左侧：历史会话 + 数据管理 -->
-        <aside class="sidebar">
+        <aside class="sidebar collapsed" role="complementary" aria-label="侧边栏导航">
             <div class="sidebar-tabs">
                 <button class="tab-btn active" data-tab="sessions">💬 会话</button>
                 <button class="tab-btn" data-tab="data">📊 数据</button>
@@ -92,7 +98,7 @@
         </aside>
 
         <!-- 中间：主内容区（步骤表单 / 对话）-->
-        <main class="main-area">
+        <main class="main-area" role="main" aria-label="主内容区域">
             <!-- 模式切换 -->
             <div class="mode-tabs">
                 <button class="mode-tab active" data-mode="wizard">📋 向导预测</button>
@@ -189,7 +195,7 @@
     </div>
 
     <!-- 数据统计弹窗 -->
-    <div class="modal" id="modal-stats" style="display:none">
+    <div class="modal" id="modal-stats" style="display:none" role="dialog" aria-label="训练数据统计">
         <div class="modal-content">
             <div class="modal-header">
                 <h3>训练数据统计</h3>
@@ -200,7 +206,7 @@
     </div>
 
     <!-- 报告弹窗 -->
-    <div class="modal" id="modal-report" style="display:none">
+    <div class="modal" id="modal-report" style="display:none" role="dialog" aria-label="造价分析报告">
         <div class="modal-content" style="max-width: 900px">
             <div class="modal-header">
                 <h3>造价分析报告</h3>
@@ -215,7 +221,7 @@
     </div>
 
     <!-- LLM 配置弹窗 -->
-    <div class="modal" id="modal-llm" style="display:none">
+    <div class="modal" id="modal-llm" style="display:none" role="dialog" aria-label="LLM 模型配置">
         <div class="modal-content" style="max-width: 720px">
             <div class="modal-header">
                 <h3>⚙ LLM 模型配置</h3>
