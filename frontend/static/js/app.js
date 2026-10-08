@@ -137,6 +137,15 @@ function bindEvents() {
     document.querySelectorAll('.tab-btn').forEach(tab => {
         tab.addEventListener('click', () => switchSidebar(tab.dataset.tab));
     });
+    // 侧边栏折叠/展开（移动端）
+    const sidebarToggleBtn = document.getElementById('btn-sidebar-toggle');
+    const sidebar = document.querySelector('.sidebar');
+    if (sidebarToggleBtn && sidebar) {
+        sidebarToggleBtn.addEventListener('click', () => {
+            sidebar.classList.toggle('collapsed');
+            sidebarToggleBtn.setAttribute('aria-expanded', !sidebar.classList.contains('collapsed'));
+        });
+    }
     // 步骤导航
     document.getElementById('btn-prev-step').addEventListener('click', prevStep);
     document.getElementById('btn-next-step').addEventListener('click', nextStep);
@@ -1447,8 +1456,34 @@ function initChat() {
         fileInput.addEventListener('change', e => {
             if (e.target.files[0]) {
                 handleChatFileUpload(e.target.files[0]);
-                e.target.value = '';  // reset for re-upload
+                e.target.value = '';
             }
+        });
+    }
+
+    // 虚拟键盘适配（移动端）
+    if (window.visualViewport) {
+        const chatArea = document.getElementById('chat-area');
+        const chatMessages = document.getElementById('chat-messages');
+        let initialHeight = window.visualViewport.height;
+
+        window.visualViewport.addEventListener('resize', () => {
+            const currentHeight = window.visualViewport.height;
+            const keyboardOpen = currentHeight < initialHeight * 0.8;
+
+            if (chatArea) {
+                chatArea.style.setProperty('--kb-offset', keyboardOpen ? (initialHeight - currentHeight) + 'px' : '0px');
+            }
+
+            if (keyboardOpen && chatMessages) {
+                requestAnimationFrame(() => {
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                });
+            }
+        });
+
+        window.visualViewport.addEventListener('resize', () => {
+            initialHeight = window.visualViewport.height;
         });
     }
 }
