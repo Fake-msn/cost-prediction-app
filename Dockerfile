@@ -15,6 +15,11 @@ COPY backend/requirements.txt ./backend/requirements.txt
 # 安装Python依赖
 RUN pip install --no-cache-dir -r backend/requirements.txt
 
+# 预装 DuckDB excel 扩展（构建期联网下载，烘进镜像，运行期离线 LOAD 即可）。
+# best-effort：下载失败不阻断构建，运行时 excel_reader 会自动回退 pd.read_excel。
+RUN python -c "import duckdb; duckdb.connect().execute('INSTALL excel; LOAD excel;'); print('excel extension preinstalled')" \
+    || echo "WARN: excel extension preinstall skipped; runtime will fall back to pandas/openpyxl"
+
 # 复制应用代码
 COPY backend/ ./backend/
 COPY frontend/ ./frontend/
