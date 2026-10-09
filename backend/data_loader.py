@@ -20,6 +20,9 @@ try:
 except ImportError:
     HAS_DUCKDB = False
 
+# 表格读取层：DuckDB excel 扩展快路径 + pandas 回退（见 excel_reader 模块文档）
+import excel_reader
+
 # 写操作串行化锁：DuckDB 为单写者模型，避免多线程（FastAPI 线程池 / 后台清理）
 # 同时对同一库文件发起写连接造成冲突。读路径使用 read_only=True，不占用此锁。
 _DB_WRITE_LOCK = threading.Lock()
@@ -104,7 +107,9 @@ class DataLoader:
     def import_from_excel(self, file_content: bytes, filename: str) -> Dict:
         """从 Excel 文件导入历史项目数据"""
         try:
-            df = pd.read_excel(io.BytesIO(file_content), engine="openpyxl")
+            # 读取层：优先 DuckDB excel 扩展（低内存、快，避免大文件 OOM/截断），
+            # 扩展不可用/mock/.xls 时自动回退 pd.read_excel(openpyxl)。清洗逻辑不变。
+            df = excel_reader.read_table(file_content, filename)
         except Exception as e:
             return {"success": False, "error": f"Excel 解析失败: {e}"}
 
