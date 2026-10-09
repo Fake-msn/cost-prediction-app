@@ -8,11 +8,13 @@
     <link rel="stylesheet" href="/static/css/landing.css">
 </head>
 <body class="landing-page">
+    <a href="#main-content" class="skip-link">跳到主要内容</a>
+
     <!-- 顶部导航 -->
-    <header class="navbar">
+    <header class="navbar" role="banner">
         <div class="container nav-inner">
             <div class="logo">
-                <div class="logo-mark">
+                <div class="logo-mark" aria-hidden="true">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                         <path d="M3 17L9 11L13 15L21 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
                         <path d="M14 7H21V14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -20,7 +22,12 @@
                 </div>
                 <span class="logo-text">AI 造价预测</span>
             </div>
-            <nav class="nav-links">
+            <button class="hamburger-btn" id="hamburger-btn" aria-label="打开导航菜单" aria-expanded="false" aria-controls="mobile-nav">
+                <span class="hamburger-line"></span>
+                <span class="hamburger-line"></span>
+                <span class="hamburger-line"></span>
+            </button>
+            <nav class="nav-links" id="nav-links" role="navigation" aria-label="主导航">
                 <a href="#features">功能特性</a>
                 <a href="#workflow">使用流程</a>
                 <a href="#pricing">定价方案</a>
@@ -28,6 +35,18 @@
             </nav>
         </div>
     </header>
+
+    <!-- 移动端导航覆盖层 -->
+    <div class="mobile-nav-overlay" id="mobile-nav" role="dialog" aria-label="导航菜单" aria-modal="true">
+        <nav class="mobile-nav-content">
+            <a href="#features" class="mobile-nav-link">功能特性</a>
+            <a href="#workflow" class="mobile-nav-link">使用流程</a>
+            <a href="#pricing" class="mobile-nav-link">定价方案</a>
+            <a href="/app" class="btn btn-primary btn-lg mobile-nav-link">开始使用</a>
+        </nav>
+    </div>
+
+    <main id="main-content">
 
     <!-- Hero 区 -->
     <section class="hero">
@@ -125,28 +144,38 @@
             </div>
             <div class="workflow-steps">
                 <div class="workflow-step">
-                    <div class="step-num">1</div>
-                    <h4>录入项目信息</h4>
+                    <div class="workflow-step-header">
+                        <div class="step-num">1</div>
+                        <h4>录入项目信息</h4>
+                    </div>
                     <p>填写项目名称、类型、面积、地区等基础信息</p>
                 </div>
                 <div class="workflow-step">
-                    <div class="step-num">2</div>
-                    <h4>选择预测阶段</h4>
+                    <div class="workflow-step-header">
+                        <div class="step-num">2</div>
+                        <h4>选择预测阶段</h4>
+                    </div>
                     <p>根据项目当前阶段选择估算/概算/预算精度</p>
                 </div>
                 <div class="workflow-step">
-                    <div class="step-num">3</div>
-                    <h4>配置技术参数</h4>
+                    <div class="workflow-step-header">
+                        <div class="step-num">3</div>
+                        <h4>配置技术参数</h4>
+                    </div>
                     <p>填写基础/结构/系统/装修等参数，越详细越精确</p>
                 </div>
                 <div class="workflow-step">
-                    <div class="step-num">4</div>
-                    <h4>选择预测模型</h4>
+                    <div class="workflow-step-header">
+                        <div class="step-num">4</div>
+                        <h4>选择预测模型</h4>
+                    </div>
                     <p>系统自动匹配最佳模型，支持手动调整</p>
                 </div>
                 <div class="workflow-step">
-                    <div class="step-num">5</div>
-                    <h4>查看预测结果</h4>
+                    <div class="workflow-step-header">
+                        <div class="step-num">5</div>
+                        <h4>查看预测结果</h4>
+                    </div>
                     <p>结构化展示六层级成本分解，导出分析报告</p>
                 </div>
             </div>
@@ -201,6 +230,8 @@
             </div>
         </div>
     </section>
+
+    </main>
 
     <!-- 页脚 -->
     <footer class="footer">
