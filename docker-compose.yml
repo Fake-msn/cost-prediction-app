@@ -17,11 +17,14 @@ services:
       # - DASHSCOPE_API_KEY=your_key_here
       # - OPENAI_API_KEY=your_key_here
     restart: unless-stopped
-    # 资源限制（M7）：防止容器无界占用宿主机资源
+    # 资源限制（M7）：防止容器无界占用宿主机资源——刻意保留上限，不做成"不限制/动态"，
+    # 以免容器吃满宿主机（尤其 pandas 回退路径读超大 xlsx 时）。
+    # v1.9.0：DuckDB excel 读取层使重负载链路（读取→清洗→入库）峰值仅 ≤294MB，2g 本已够用；
+    # 提到 4g 为偶发的 openpyxl 回退大表导入预留余量。CPU 维持 2.0（应用为单 worker、CPU 非瓶颈）。
     deploy:
       resources:
         limits:
-          memory: 2g
+          memory: 4g
           cpus: "2.0"
         reservations:
           memory: 512m
