@@ -50,5 +50,68 @@ _stress_test_tmp/
 # DuckDB 2.0 upgrade verification scratch (isolated nightly env + diff outputs)
 _duckdb2_tmp/
 
+# Excel table-read-layer PoC fixtures (generated xlsx + probe scripts)
+_poc_excel_tmp/
+
+# Qoder Canvas artifact status files
+*.canvas.status.json
+
 # ModelScope deployment staging
 .modelscope-deploy/
+
+# AI toolchain skills install dirs - the skill installer writes one copy of
+# skills/modelscope-studio-deploy per detected agent tool. Duplicated artifacts.
+# Canonical install location is skills/ + skills-lock.json.
+.adal/
+.agents/
+.aider-desk/
+.augment/
+.autohand/
+.bob/
+.claude/
+.codeartsdoer/
+.codebuddy/
+.codemaker/
+.codestudio/
+.commandcode/
+.continue/
+.cortex/
+.crush/
+.devin/
+.forge/
+.fx/
+.goose/
+.grok/
+.hermes/
+.iflow/
+.inferencesh/
+.jazz/
+.junie/
+.kimchi/
+.kiro/
+.kode/
+.lingma/
+.mcpjam/
+.minimax/
+.moxby/
+.mux/
+.neovate/
+.ona/
+.openhands/
+.pochi/
+.posit/
+.qoder/
+.qwen/
+.reasonix/
+.roo/
+.rovodev/
+.tabnine/
+.terramind/
+.tinycloud/
+.trae/
+.vibe/
+.windsurf/
+.zcode/
+.zencoder/
+agent/skills/
+data/skills/
