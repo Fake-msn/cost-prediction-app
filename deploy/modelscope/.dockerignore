@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.github/
+
+# Docs
+*.md
+!README.md
+docs/
+release-notes/
+
+# Tests
+backend/tests/
+pytest.ini
+
+# Scripts
+start.bat
+start.sh
+push.bat
+*.bat
+*.sh
+
+# Config
+.gitignore
+.dockerignore
+docker-compose.yml
+.env*
+model_config.json*
+
+# Output
+output/
+_stress_test_tmp/
