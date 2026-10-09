@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "skills": {
+    "modelscope-studio-deploy": {
+      "source": "modelscope.cn",
+      "sourceUrl": "https://www.modelscope.cn/skills/hicicada/modelscope-studio-deploy",
+      "sourceType": "well-known",
+      "computedHash": "e4d87c4ae7ee021ff03d50b00959637668261ca04a71c5d12914ecd9e67cb408",
+      "wellKnownDigest": "sha256:251b700f3e34f595c8e59cb300a8959ca79e2bb79c82c3ea711d37b53899bd88"
+    }
+  }
+}
