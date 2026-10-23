@@ -53,8 +53,9 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
 
       # 真实 DuckDB 引擎门禁（非 mock）：backend/tests 用 conftest 全局 mock 掉 duckdb，
-      # 无法捕获存储/接口回归。以下两步对真实安装的 duckdb（pin <2.0）跑通核心构造。
-      # 注意：绝不使用 pip --pre，避免拉到 2.0 dev 预发布版（见 DUCKDB2_UPGRADE_RUNBOOK.md）。
+      # 无法捕获存储/接口回归。以下两步对真实安装的 duckdb（pin ==2.0.0，已于 2026-10-21 GA）
+      # 跑通核心构造，作为 2.0 切换后的持续兼容性门禁。
+      # 注意：仍绝不使用 pip --pre，只装稳定版，避免拉到 2.x dev 预发布（见 DUCKDB2_UPGRADE_RUNBOOK.md）。
       - name: DuckDB compatibility audit (real engine)
         run: |
           python backend/scripts/duckdb2_compat_audit.py
